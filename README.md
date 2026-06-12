@@ -25,7 +25,7 @@ DNS 的响应速度和稳定性直接影响您的上网体验。`dns-optimizer` 
 
 ## 📸 运行截图
 
-![DNS Optimizer 运行截图](imgs/screenshot.png)  
+![DNS Optimizer 运行截图](assets/screenshot.png)  
 
 **文本版演示:**
 ```
