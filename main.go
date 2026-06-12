@@ -3,11 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/fatih/color"
-	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 
 	"github.com/palemoky/dns-optimizer/internal/dnsbench"
@@ -18,6 +15,7 @@ var (
 	queriesPerDomain int
 	queryTimeout     time.Duration
 	maxConcurrency   int
+	noSystemDNS      bool
 )
 
 var rootCmd = &cobra.Command{
@@ -29,57 +27,51 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVarP(&domainsStr, "domains", "d", strings.Join(dnsbench.DefaultDomains, ","), "用于测试的域名列表, 以逗号分隔")
+	flags.StringVarP(&domainsStr, "domains", "d", "", "自定义测试域名列表, 以逗号分隔（默认使用内置国内/国外域名）")
 	flags.IntVarP(&queriesPerDomain, "queries", "q", 3, "每个域名的查询次数")
 	flags.DurationVarP(&queryTimeout, "timeout", "t", 2*time.Second, "单次查询超时时间")
 	flags.IntVarP(&maxConcurrency, "concurrency", "c", 16, "同时测试的服务器数量上限")
+	flags.BoolVar(&noSystemDNS, "no-system-dns", false, "不检测、不测试当前系统默认 DNS")
 }
 
 func runBenchmark(cmd *cobra.Command, args []string) {
-	domains := dnsbench.ParseDomains(domainsStr)
+	// 域名：用户传了 -d 用自定义（归入“自定义”分类），否则用内置分类列表。
+	domains := dnsbench.DefaultDomains
+	if cmd.Flags().Changed("domains") {
+		domains = dnsbench.ParseDomains(domainsStr)
+	}
 	if len(domains) == 0 {
 		fmt.Println("错误: 没有有效的测试域名。")
 		os.Exit(1)
 	}
 
+	// 服务器：内置列表 + （未禁用时）系统当前默认 DNS。
 	servers := dnsbench.DefaultServers
-	totalQueries := len(servers) * len(domains) * queriesPerDomain
+	if !noSystemDNS {
+		if sys := dnsbench.DetectSystemDNS(); len(sys) > 0 {
+			servers = append(append([]dnsbench.Server{}, servers...), sys...)
+		}
+	}
 
-	fmt.Println("DNS 选优工具: 开始对", len(servers), "个 DNS 服务器进行综合基准测试...")
-	fmt.Printf("测试域名 (%d个): %s\n", len(domains), strings.Join(domains, ", "))
-	fmt.Printf("每个域名查询 %d 次, 总计 %d 次查询。\n\n", queriesPerDomain, totalQueries)
+	fmt.Printf("DNS 选优工具: 开始对 %d 个 DNS 服务器、%d 个域名进行综合基准测试...\n\n",
+		len(servers), len(domains))
 
-	bar := newProgressBar(totalQueries)
-
+	tracker := newStatusTracker(domains, len(servers), queriesPerDomain)
+	tracker.Start()
 	results := dnsbench.Run(dnsbench.Options{
 		Servers:     servers,
 		Domains:     domains,
 		Queries:     queriesPerDomain,
 		Timeout:     queryTimeout,
 		Concurrency: maxConcurrency,
-	}, func() { bar.Add(1) })
-	fmt.Println()
+	}, tracker.Progress)
+	tracker.Stop()
 
-	fmt.Println("--- 综合测试结果 ---")
+	fmt.Println("\n--- 综合测试结果 ---")
 	printResultsTable(results)
 
 	fmt.Println("\n--- 最佳DNS推荐 (Top 3) ---")
 	printRecommendations(results)
-}
-
-func newProgressBar(total int) *progressbar.ProgressBar {
-	return progressbar.NewOptions(total,
-		progressbar.OptionSetWriter(color.Output),
-		progressbar.OptionEnableColorCodes(true),
-		progressbar.OptionSetDescription("[cyan]Running queries[reset]"),
-		progressbar.OptionSetTheme(progressbar.Theme{
-			Saucer:        "[green]=[reset]",
-			SaucerHead:    "[green]>[reset]",
-			SaucerPadding: " ",
-			BarStart:      "[",
-			BarEnd:        "]",
-		}),
-	)
 }
 
 func main() {

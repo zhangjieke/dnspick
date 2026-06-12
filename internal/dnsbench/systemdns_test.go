@@ -1,0 +1,63 @@
+package dnsbench
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestSystemDNSFromResolvConf(t *testing.T) {
+	content := `# comment
+nameserver 192.168.1.1
+nameserver 8.8.8.8
+options ndots:2
+`
+	path := filepath.Join(t.TempDir(), "resolv.conf")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := systemDNSFromResolvConf(path)
+	want := []string{"192.168.1.1", "8.8.8.8"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}
+
+func TestSystemDNSFromResolvConfMissing(t *testing.T) {
+	if got := systemDNSFromResolvConf(filepath.Join(t.TempDir(), "nope.conf")); got != nil {
+		t.Fatalf("expected nil for missing file, got %v", got)
+	}
+}
+
+func TestBuildSystemServers(t *testing.T) {
+	// 去重 + 过滤非法 + 命名编号。
+	servers := buildSystemServers([]string{"1.1.1.1", "1.1.1.1", "", "not-an-ip", "8.8.8.8"})
+	if len(servers) != 2 {
+		t.Fatalf("expected 2 servers, got %d: %+v", len(servers), servers)
+	}
+	for _, s := range servers {
+		if !s.IsSystem || s.Protocol != UDP {
+			t.Fatalf("unexpected server fields: %+v", s)
+		}
+	}
+	if servers[0].Name != "当前默认 DNS 1" || servers[1].Name != "当前默认 DNS 2" {
+		t.Fatalf("unexpected names: %q, %q", servers[0].Name, servers[1].Name)
+	}
+
+	// 单个时不编号。
+	single := buildSystemServers([]string{"9.9.9.9"})
+	if len(single) != 1 || single[0].Name != "当前默认 DNS" {
+		t.Fatalf("unexpected single server: %+v", single)
+	}
+
+	// 全非法 → 空。
+	if got := buildSystemServers([]string{"", "x"}); got != nil {
+		t.Fatalf("expected nil, got %v", got)
+	}
+}

@@ -10,7 +10,7 @@ import (
 // Options 控制一次基准测试的行为。
 type Options struct {
 	Servers     []Server      // 待测试的服务器；为空时使用 DefaultServers
-	Domains     []string      // 测试域名
+	Domains     []Domain      // 测试域名
 	Queries     int           // 每个域名的查询次数
 	Timeout     time.Duration // 单次查询超时
 	Concurrency int           // 同时测试的服务器数量上限
@@ -22,6 +22,7 @@ type Result struct {
 	AvgTime            time.Duration
 	SuccessRate, Score float64
 	Successes, Total   int
+	IsSystem           bool // 是否为系统当前默认 DNS
 }
 
 // queryResult 是单次查询的原始结果。
@@ -37,12 +38,14 @@ type serverStat struct {
 	successes int
 	total     int
 	address   string
+	isSystem  bool
 }
 
-// ParseDomains 拆分、去空格并去重域名列表，保持原始顺序。
-func ParseDomains(raw string) []string {
+// ParseDomains 拆分、去空格并去重自定义域名列表，保持原始顺序。
+// 自定义域名统一归入 CategoryCustom 分类。
+func ParseDomains(raw string) []Domain {
 	seen := make(map[string]struct{})
-	var domains []string
+	var domains []Domain
 	for d := range strings.SplitSeq(raw, ",") {
 		d = strings.TrimSpace(d)
 		if d == "" {
@@ -52,20 +55,20 @@ func ParseDomains(raw string) []string {
 			continue
 		}
 		seen[d] = struct{}{}
-		domains = append(domains, d)
+		domains = append(domains, Domain{Name: d, Category: CategoryCustom})
 	}
 	return domains
 }
 
 // Run 并发对所有服务器执行基准测试并返回按评分降序排列的结果。
-// progress 在每次查询完成后被调用（可为 nil），用于驱动进度条等 UI。
-func Run(opts Options, progress func()) []Result {
+// progress 在每次查询完成后以该次查询的域名为参数被调用（可为 nil），用于驱动实时进度 UI。
+func Run(opts Options, progress func(domain string)) []Result {
 	servers := opts.Servers
 	if len(servers) == 0 {
 		servers = DefaultServers
 	}
 	if progress == nil {
-		progress = func() {}
+		progress = func(string) {}
 	}
 	concurrency := max(opts.Concurrency, 1)
 
@@ -96,18 +99,18 @@ func Run(opts Options, progress func()) []Result {
 // benchmarkServer 对单个服务器顺序执行所有查询。
 // 先做一次不计入结果的预热查询，让 DoT/DoH 建立连接、缓存服务器域名解析，
 // 使各协议的测量进入稳定状态、更具可比性。
-func benchmarkServer(server Server, opts Options, ch chan<- queryResult, progress func()) {
+func benchmarkServer(server Server, opts Options, ch chan<- queryResult, progress func(domain string)) {
 	q, closeFn := newQuerier(server, opts.Timeout)
 	defer closeFn()
 
 	// 预热（结果丢弃）。
-	_, _ = q(opts.Domains[0])
+	_, _ = q(opts.Domains[0].Name)
 
 	for _, domain := range opts.Domains {
 		for range opts.Queries {
-			d, err := q(domain)
+			d, err := q(domain.Name)
 			ch <- queryResult{server: server, duration: d, err: err}
-			progress()
+			progress(domain.Name)
 		}
 	}
 }
@@ -118,7 +121,7 @@ func aggregateResults(resultsChan <-chan queryResult) map[string]*serverStat {
 	for result := range resultsChan {
 		stats, ok := serverStats[result.server.Name]
 		if !ok {
-			stats = &serverStat{address: result.server.Address}
+			stats = &serverStat{address: result.server.Address, isSystem: result.server.IsSystem}
 			serverStats[result.server.Name] = stats
 		}
 		stats.total++
@@ -136,6 +139,7 @@ func calculateScores(serverStats map[string]*serverStat) []Result {
 	for name, stats := range serverStats {
 		res := Result{
 			Name: name, Address: stats.address, Successes: stats.successes, Total: stats.total,
+			IsSystem: stats.isSystem,
 		}
 
 		if stats.successes > 0 {

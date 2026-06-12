@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -14,12 +15,12 @@ import (
 // printResultsTable 使用 tablewriter 打印漂亮的结果表格。
 func printResultsTable(results []dnsbench.Result) {
 	table := tablewriter.NewWriter(os.Stdout)
-	table.Header([]string{"DNS服务器", "地址", "平均延迟", "成功率", "综合评分"})
+	table.Header([]string{"#", "DNS服务器", "地址", "平均延迟", "成功率", "综合评分"})
 
 	green := color.New(color.FgGreen).SprintFunc()
 	red := color.New(color.FgRed).SprintFunc()
 
-	for _, r := range results {
+	for i, r := range results {
 		rateStr := fmt.Sprintf("%.1f%% (%d/%d)", r.SuccessRate*100, r.Successes, r.Total)
 		if r.SuccessRate < 1.0 {
 			rateStr = red(rateStr)
@@ -27,8 +28,13 @@ func printResultsTable(results []dnsbench.Result) {
 			rateStr = green(rateStr)
 		}
 
+		name := r.Name
+		if r.IsSystem {
+			name += " (当前)"
+		}
 		table.Append([]string{
-			r.Name,
+			fmt.Sprintf("%d", i+1),
+			name,
 			r.Address,
 			r.AvgTime.Round(time.Microsecond).String(),
 			rateStr,
@@ -62,5 +68,49 @@ func printRecommendations(results []dnsbench.Result) {
 	}
 	if found == 0 {
 		red.Println("没有找到表现足够好的DNS服务器，请检查网络连接。")
+	}
+
+	if msg, ok := systemDNSVerdict(results); ok {
+		c := color.New(color.FgGreen, color.Bold)
+		if strings.HasPrefix(msg, "⚠") {
+			c = color.New(color.FgYellow, color.Bold)
+		}
+		fmt.Println()
+		c.Println(msg)
+	}
+}
+
+// systemDNSVerdict 针对系统当前默认 DNS 给出是否需要调整的结论。
+// 若结果中不含系统 DNS，则 ok 为 false。results 须按评分降序排列。
+func systemDNSVerdict(results []dnsbench.Result) (msg string, ok bool) {
+	if len(results) == 0 {
+		return "", false
+	}
+	sysRank := -1
+	for i := range results {
+		if results[i].IsSystem {
+			sysRank = i
+			break
+		}
+	}
+	if sysRank < 0 {
+		return "", false
+	}
+
+	sys := results[sysRank]
+	best := results[0]
+	switch {
+	case sys.Successes == 0:
+		return fmt.Sprintf("⚠️  当前默认 DNS (%s) 查询全部失败，建议切换到 #1 %s (%s)。",
+			sys.Address, best.Name, best.Address), true
+	case sysRank == 0:
+		return fmt.Sprintf("✅ 当前默认 DNS (%s) 已是最优，无需调整。", sys.Address), true
+	case sys.Score >= 0.9*best.Score:
+		return fmt.Sprintf("✅ 当前默认 DNS (%s) 接近最优（排名第 %d），无需调整。",
+			sys.Address, sysRank+1), true
+	default:
+		return fmt.Sprintf("⚠️  当前默认 DNS (%s) 排名第 %d，建议切换到 #1 %s (%s)：平均延迟 %s → %s。",
+			sys.Address, sysRank+1, best.Name, best.Address,
+			sys.AvgTime.Round(time.Microsecond), best.AvgTime.Round(time.Microsecond)), true
 	}
 }

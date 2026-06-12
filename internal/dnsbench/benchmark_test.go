@@ -13,8 +13,11 @@ func TestParseDomains(t *testing.T) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 	for i := range want {
-		if got[i] != want[i] {
+		if got[i].Name != want[i] {
 			t.Fatalf("got %v, want %v", got, want)
+		}
+		if got[i].Category != CategoryCustom {
+			t.Fatalf("domain %q category = %q, want %q", got[i].Name, got[i].Category, CategoryCustom)
 		}
 	}
 }

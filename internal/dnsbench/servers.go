@@ -10,7 +10,20 @@ const (
 )
 
 // Server 描述一个待测试的 DNS 服务器。
-type Server struct{ Name, Address, Protocol string }
+type Server struct {
+	Name, Address, Protocol string
+	IsSystem                bool // 是否为检测到的系统当前默认 DNS
+}
+
+// 域名分类。
+const (
+	CategoryDomestic = "国内"
+	CategoryForeign  = "国外"
+	CategoryCustom   = "自定义"
+)
+
+// Domain 是一个带分类的测试域名。
+type Domain struct{ Name, Category string }
 
 // DefaultServers 是内置的默认 DNS 服务器列表。
 var DefaultServers = []Server{
@@ -40,9 +53,10 @@ var DefaultServers = []Server{
 	{Name: "Cloudflare 1 (DoT)", Address: "1.1.1.1", Protocol: DOT},
 	{Name: "Cloudflare 2 (DoT)", Address: "one.one.one.one", Protocol: DOT},
 
-	{Name: "AliDNS 1 (DoH)", Address: "https://dns.alidns.com/dns-query", Protocol: DOH},
-	{Name: "AliDNS 2 (DoH)", Address: "https://223.5.5.5/dns-query", Protocol: DOH},
-	{Name: "AliDNS 3 (DoH)", Address: "https://223.6.6.6/dns-query", Protocol: DOH},
+	// AliDNS 的 JSON(application/dns-json) 接口在 /resolve；/dns-query 仅支持 RFC 8484 wire-format。
+	{Name: "AliDNS 1 (DoH)", Address: "https://dns.alidns.com/resolve", Protocol: DOH},
+	{Name: "AliDNS 2 (DoH)", Address: "https://223.5.5.5/resolve", Protocol: DOH},
+	{Name: "AliDNS 3 (DoH)", Address: "https://223.6.6.6/resolve", Protocol: DOH},
 	{Name: "DNSPod (DoH)", Address: "https://doh.pub/dns-query", Protocol: DOH},
 	{Name: "Cloudflare 1 (DoH)", Address: "https://cloudflare-dns.com/dns-query", Protocol: DOH},
 	{Name: "Cloudflare 2 (DoH)", Address: "https://1.1.1.1/dns-query", Protocol: DOH},
@@ -50,13 +64,27 @@ var DefaultServers = []Server{
 	{Name: "Google (DoH)", Address: "https://dns.google/resolve", Protocol: DOH},
 }
 
-// DefaultDomains 是内置的默认测试域名列表。
-var DefaultDomains = []string{
-	"douyin.com", "kuaishou.com", "baidu.com", "taobao.com", "mi.com", "aliyun.com",
-	"bilibili.com", "jd.com", "qq.com", "ithome.com", "hupu.com", "feishu.cn",
-	"sohu.com", "163.com", "sina.com", "weibo.com", "xiaohongshu.com",
-	"douban.com", "zhihu.com", "youku.com", "youdao.com", "mp.weixin.qq.com",
-	"iqiyi.com", "v.qq.com", "y.qq.com", "www.ctrip.com", "autohome.com.cn",
-	"google.com", "facebook.com", "x.com", "github.com", "youtube.com", "chatgpt.com",
-	"apple.com", "bing.com", "tiktok.com",
+// DefaultDomains 是内置的默认测试域名列表（按分类均衡精选，去除同公司重复域名）。
+var DefaultDomains = []Domain{
+	{"baidu.com", CategoryDomestic},
+	{"qq.com", CategoryDomestic},
+	{"taobao.com", CategoryDomestic},
+	{"jd.com", CategoryDomestic},
+	{"bilibili.com", CategoryDomestic},
+	{"douyin.com", CategoryDomestic},
+	{"weibo.com", CategoryDomestic},
+	{"163.com", CategoryDomestic},
+	{"zhihu.com", CategoryDomestic},
+	{"aliyun.com", CategoryDomestic},
+
+	{"google.com", CategoryForeign},
+	{"youtube.com", CategoryForeign},
+	{"github.com", CategoryForeign},
+	{"facebook.com", CategoryForeign},
+	{"x.com", CategoryForeign},
+	{"apple.com", CategoryForeign},
+	{"chatgpt.com", CategoryForeign},
+	{"bing.com", CategoryForeign},
+	{"tiktok.com", CategoryForeign},
+	{"cloudflare.com", CategoryForeign},
 }
