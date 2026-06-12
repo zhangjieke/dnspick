@@ -19,13 +19,21 @@ import (
 // statusTracker 维护每个域名的测试进度，并以分类表格的形式实时展示：
 // 未开始显示 "-"，进行中显示百分比，完成显示 "✔"。
 // 在 TTY 下原地刷新；非 TTY（管道/CI）下降级为静态表 + 周期性百分比。
+// catGroup 是按分类聚合的一组域名（indices 指向 statusTracker.domains/done）。
+type catGroup struct {
+	name    string
+	indices []int
+}
+
 type statusTracker struct {
 	mu         sync.Mutex
 	domains    []dnsbench.Domain
 	idx        map[string]int
 	done       []int
-	perTotal   int // 单个域名的总查询次数 = 服务器数 * 每域查询次数
-	grand      int // 所有查询总数
+	groups     []catGroup // 各分类并列展示
+	maxRows    int        // 最大分组域名数（决定表格行数）
+	perTotal   int        // 单个域名的总查询次数 = 服务器数 * 每域查询次数
+	grand      int        // 所有查询总数
 	completed  int
 	isTTY      bool
 	lines      int // 上一次渲染的行数（TTY 原地刷新用）
@@ -40,11 +48,35 @@ func newStatusTracker(domains []dnsbench.Domain, numServers, queries int) *statu
 	for i, d := range domains {
 		idx[d.Name] = i
 	}
+
+	// 按分类聚合，保持首次出现顺序，供并列展示。
+	var order []string
+	gmap := make(map[string]*catGroup)
+	for i, d := range domains {
+		g, ok := gmap[d.Category]
+		if !ok {
+			g = &catGroup{name: d.Category}
+			gmap[d.Category] = g
+			order = append(order, d.Category)
+		}
+		g.indices = append(g.indices, i)
+	}
+	groups := make([]catGroup, len(order))
+	maxRows := 0
+	for k, name := range order {
+		groups[k] = *gmap[name]
+		if n := len(groups[k].indices); n > maxRows {
+			maxRows = n
+		}
+	}
+
 	perTotal := numServers * queries
 	return &statusTracker{
 		domains:  domains,
 		idx:      idx,
 		done:     make([]int, len(domains)),
+		groups:   groups,
+		maxRows:  maxRows,
 		perTotal: perTotal,
 		grand:    perTotal * len(domains),
 		isTTY:    term.IsTerminal(int(os.Stdout.Fd())),
@@ -131,20 +163,28 @@ func (t *statusTracker) printSnapshot() {
 }
 
 // renderLocked 渲染表格为行切片（调用方须持有锁）。
+// 各分类并列成列组（域名 | 状态），以减少纵向高度。
 func (t *statusTracker) renderLocked() []string {
 	var buf bytes.Buffer
 	table := tablewriter.NewWriter(&buf)
-	table.Header([]string{"分类", "域名", "状态"})
 
-	prevCat := ""
-	for i, d := range t.domains {
-		cat := d.Category
-		if cat == prevCat {
-			cat = "" // 同组只在首行显示分类
-		} else {
-			prevCat = d.Category
+	header := make([]string, 0, len(t.groups)*2)
+	for _, g := range t.groups {
+		header = append(header, g.name, "状态")
+	}
+	table.Header(header)
+
+	for r := range t.maxRows {
+		row := make([]string, 0, len(t.groups)*2)
+		for _, g := range t.groups {
+			if r < len(g.indices) {
+				i := g.indices[r]
+				row = append(row, t.domains[i].Name, statusCell(t.done[i], t.perTotal))
+			} else {
+				row = append(row, "", "")
+			}
 		}
-		table.Append([]string{cat, d.Name, statusCell(t.done[i], t.perTotal)})
+		table.Append(row)
 	}
 	table.Render()
 

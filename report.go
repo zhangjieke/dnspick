@@ -80,8 +80,17 @@ func printRecommendations(results []dnsbench.Result) {
 	}
 }
 
+const (
+	// switchLatencyThreshold：系统 DNS 比最优慢不足此值时视为无意义差异，不建议切换。
+	switchLatencyThreshold = 15 * time.Millisecond
+	// switchSuccessMargin：系统 DNS 成功率落后最优超过此值时，即便延迟接近也建议切换。
+	switchSuccessMargin = 0.05
+)
+
 // systemDNSVerdict 针对系统当前默认 DNS 给出是否需要调整的结论。
-// 若结果中不含系统 DNS，则 ok 为 false。results 须按评分降序排列。
+// 仅当系统 DNS 明显更慢（延迟差 ≥ switchLatencyThreshold）或可靠性明显更差时才建议切换，
+// 避免因几毫秒的无意义差异误导用户。若结果中不含系统 DNS，则 ok 为 false。
+// results 须按评分降序排列。
 func systemDNSVerdict(results []dnsbench.Result) (msg string, ok bool) {
 	if len(results) == 0 {
 		return "", false
@@ -99,15 +108,18 @@ func systemDNSVerdict(results []dnsbench.Result) (msg string, ok bool) {
 
 	sys := results[sysRank]
 	best := results[0]
+	latencyGap := sys.AvgTime - best.AvgTime
+	closeEnough := latencyGap < switchLatencyThreshold && best.SuccessRate-sys.SuccessRate <= switchSuccessMargin
+
 	switch {
 	case sys.Successes == 0:
 		return fmt.Sprintf("⚠️  当前默认 DNS (%s) 查询全部失败，建议切换到 #1 %s (%s)。",
 			sys.Address, best.Name, best.Address), true
 	case sysRank == 0:
 		return fmt.Sprintf("✅ 当前默认 DNS (%s) 已是最优，无需调整。", sys.Address), true
-	case sys.Score >= 0.9*best.Score:
-		return fmt.Sprintf("✅ 当前默认 DNS (%s) 接近最优（排名第 %d），无需调整。",
-			sys.Address, sysRank+1), true
+	case closeEnough:
+		return fmt.Sprintf("✅ 当前默认 DNS (%s) 已足够好（排名第 %d，仅慢 %s），无需调整。",
+			sys.Address, sysRank+1, latencyGap.Round(time.Microsecond)), true
 	default:
 		return fmt.Sprintf("⚠️  当前默认 DNS (%s) 排名第 %d，建议切换到 #1 %s (%s)：平均延迟 %s → %s。",
 			sys.Address, sysRank+1, best.Name, best.Address,

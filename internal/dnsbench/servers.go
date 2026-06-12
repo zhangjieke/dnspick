@@ -53,15 +53,15 @@ var DefaultServers = []Server{
 	{Name: "Cloudflare 1 (DoT)", Address: "1.1.1.1", Protocol: DOT},
 	{Name: "Cloudflare 2 (DoT)", Address: "one.one.one.one", Protocol: DOT},
 
-	// AliDNS 的 JSON(application/dns-json) 接口在 /resolve；/dns-query 仅支持 RFC 8484 wire-format。
-	{Name: "AliDNS 1 (DoH)", Address: "https://dns.alidns.com/resolve", Protocol: DOH},
-	{Name: "AliDNS 2 (DoH)", Address: "https://223.5.5.5/resolve", Protocol: DOH},
-	{Name: "AliDNS 3 (DoH)", Address: "https://223.6.6.6/resolve", Protocol: DOH},
+	// 统一使用 RFC 8484 标准的 /dns-query 端点（wire-format，application/dns-message）。
+	{Name: "AliDNS 1 (DoH)", Address: "https://dns.alidns.com/dns-query", Protocol: DOH},
+	{Name: "AliDNS 2 (DoH)", Address: "https://223.5.5.5/dns-query", Protocol: DOH},
+	{Name: "AliDNS 3 (DoH)", Address: "https://223.6.6.6/dns-query", Protocol: DOH},
 	{Name: "DNSPod (DoH)", Address: "https://doh.pub/dns-query", Protocol: DOH},
 	{Name: "Cloudflare 1 (DoH)", Address: "https://cloudflare-dns.com/dns-query", Protocol: DOH},
 	{Name: "Cloudflare 2 (DoH)", Address: "https://1.1.1.1/dns-query", Protocol: DOH},
 	{Name: "Cloudflare 3 (DoH)", Address: "https://1.0.0.1/dns-query", Protocol: DOH},
-	{Name: "Google (DoH)", Address: "https://dns.google/resolve", Protocol: DOH},
+	{Name: "Google (DoH)", Address: "https://dns.google/dns-query", Protocol: DOH},
 }
 
 // DefaultDomains 是内置的默认测试域名列表（按分类均衡精选，去除同公司重复域名）。

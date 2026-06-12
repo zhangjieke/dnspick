@@ -1,6 +1,7 @@
 package dnsbench
 
 import (
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -73,9 +74,28 @@ func TestReusableExchangeServfail(t *testing.T) {
 func TestDohQuery(t *testing.T) {
 	client := &http.Client{Timeout: time.Second}
 
+	// dnsWireReply 解析请求中的 wire-format 查询，构造对应 Rcode 的应答报文。
+	dnsWireReply := func(t *testing.T, r *http.Request, rcode int) []byte {
+		t.Helper()
+		body, _ := io.ReadAll(r.Body)
+		req := new(dns.Msg)
+		if err := req.Unpack(body); err != nil {
+			t.Fatalf("server failed to unpack request: %v", err)
+		}
+		reply := new(dns.Msg)
+		reply.SetReply(req)
+		reply.Rcode = rcode
+		b, err := reply.Pack()
+		if err != nil {
+			t.Fatalf("pack reply: %v", err)
+		}
+		return b
+	}
+
 	t.Run("valid", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`{"Status":0,"Answer":[{"data":"1.2.3.4"}]}`))
+			w.Header().Set("Content-Type", "application/dns-message")
+			w.Write(dnsWireReply(t, r, dns.RcodeSuccess))
 		}))
 		defer srv.Close()
 		if err := dohQuery(client, srv.URL, "example.com"); err != nil {
@@ -83,13 +103,13 @@ func TestDohQuery(t *testing.T) {
 		}
 	})
 
-	t.Run("nxdomain status", func(t *testing.T) {
+	t.Run("nxdomain rcode", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`{"Status":3}`))
+			w.Write(dnsWireReply(t, r, dns.RcodeNameError))
 		}))
 		defer srv.Close()
 		if err := dohQuery(client, srv.URL, "example.com"); err == nil {
-			t.Fatal("expected error for non-zero status")
+			t.Fatal("expected error for NXDOMAIN rcode")
 		}
 	})
 
@@ -105,11 +125,11 @@ func TestDohQuery(t *testing.T) {
 
 	t.Run("garbage body", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`not json`))
+			w.Write([]byte("not a dns message"))
 		}))
 		defer srv.Close()
 		if err := dohQuery(client, srv.URL, "example.com"); err == nil {
-			t.Fatal("expected error for invalid JSON")
+			t.Fatal("expected error for non-wire body")
 		}
 	})
 }

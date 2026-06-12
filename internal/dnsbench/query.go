@@ -1,9 +1,9 @@
 package dnsbench
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -107,19 +107,23 @@ func reusableExchange(client *dns.Client, addr string) (querier, func()) {
 	return query, closeFn
 }
 
-// dohResponse 是 application/dns-json 响应的最小子集（RFC 8484 风格）。
-type dohResponse struct {
-	Status int `json:"Status"`
-}
-
-// dohQuery 发起一次 DoH 查询并校验返回内容（而不仅仅是 HTTP 状态码）。
+// dohQuery 按 RFC 8484 以 wire-format(application/dns-message) 发起一次 DoH 查询，
+// 并校验返回的 DNS 报文（而不仅仅是 HTTP 状态码）。相比各家不一致的 JSON 方言，
+// wire-format 是 DoH 标准，所有服务器在 /dns-query 端点均支持。
 func dohQuery(client *http.Client, endpoint, domain string) error {
-	reqURL := fmt.Sprintf("%s?name=%s&type=A", endpoint, domain)
-	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	q := new(dns.Msg)
+	q.SetQuestion(dns.Fqdn(domain), dns.TypeA)
+	wire, err := q.Pack()
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Accept", "application/dns-json")
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(wire))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/dns-message")
+	req.Header.Set("Accept", "application/dns-message")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -132,12 +136,16 @@ func dohQuery(client *http.Client, endpoint, domain string) error {
 		return fmt.Errorf("HTTP status %d", resp.StatusCode)
 	}
 
-	var parsed dohResponse
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return err
+	}
+	var r dns.Msg
+	if err := r.Unpack(body); err != nil {
 		return fmt.Errorf("解析 DoH 响应失败: %w", err)
 	}
-	if parsed.Status != 0 {
-		return fmt.Errorf("DoH 响应状态码 %d", parsed.Status)
+	if r.Rcode != dns.RcodeSuccess {
+		return fmt.Errorf("DNS 响应码 %s", dns.RcodeToString[r.Rcode])
 	}
 	return nil
 }
