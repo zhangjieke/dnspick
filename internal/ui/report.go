@@ -1,4 +1,4 @@
-package main
+package ui
 
 import (
 	"fmt"
@@ -12,8 +12,8 @@ import (
 	"github.com/palemoky/dnspick/internal/dnsbench"
 )
 
-// printResultsTable 使用 tablewriter 打印漂亮的结果表格。
-func printResultsTable(results []dnsbench.Result) {
+// PrintResultsTable 使用 tablewriter 打印漂亮的结果表格。
+func PrintResultsTable(results []dnsbench.Result) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.Header([]string{"#", "DNS服务器", "地址", "平均延迟", "成功率", "综合评分"})
 
@@ -44,8 +44,8 @@ func printResultsTable(results []dnsbench.Result) {
 	table.Render()
 }
 
-// printRecommendations 打印 Top 推荐。
-func printRecommendations(results []dnsbench.Result) {
+// PrintRecommendations 打印 Top 推荐。
+func PrintRecommendations(results []dnsbench.Result) {
 	palette := []*color.Color{
 		color.New(color.FgGreen, color.Bold),
 		color.New(color.FgYellow),

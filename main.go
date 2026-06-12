@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/palemoky/dnspick/internal/dnsbench"
+	"github.com/palemoky/dnspick/internal/ui"
 )
 
 var (
@@ -56,7 +57,7 @@ func runBenchmark(cmd *cobra.Command, args []string) {
 	fmt.Printf("DNS 选优工具: 开始对 %d 个 DNS 服务器、%d 个域名进行综合基准测试...\n\n",
 		len(servers), len(domains))
 
-	tracker := newStatusTracker(domains, len(servers), queriesPerDomain)
+	tracker := ui.NewStatusTracker(domains, len(servers), queriesPerDomain)
 	tracker.Start()
 	results := dnsbench.Run(dnsbench.Options{
 		Servers:     servers,
@@ -68,10 +69,10 @@ func runBenchmark(cmd *cobra.Command, args []string) {
 	tracker.Stop()
 
 	fmt.Println("\n--- 综合测试结果 ---")
-	printResultsTable(results)
+	ui.PrintResultsTable(results)
 
 	fmt.Println("\n--- 最佳DNS推荐 (Top 3) ---")
-	printRecommendations(results)
+	ui.PrintRecommendations(results)
 }
 
 func main() {

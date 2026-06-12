@@ -1,4 +1,4 @@
-package main
+package ui
 
 import (
 	"bytes"
@@ -16,16 +16,16 @@ import (
 	"github.com/palemoky/dnspick/internal/dnsbench"
 )
 
-// catGroup 是按分类聚合的一组域名（indices 指向 statusTracker.domains/done）。
+// catGroup 是按分类聚合的一组域名（indices 指向 StatusTracker.domains/done）。
 type catGroup struct {
 	name    string
 	indices []int
 }
 
-// statusTracker 维护每个域名的测试进度，并以分类表格的形式实时展示：
+// StatusTracker 维护每个域名的测试进度，并以分类表格的形式实时展示：
 // 未开始显示 "-"，进行中显示百分比，完成显示 "✔"。
 // 在 TTY 下原地刷新；非 TTY（管道/CI）下降级为静态表 + 周期性百分比。
-type statusTracker struct {
+type StatusTracker struct {
 	mu         sync.Mutex
 	domains    []dnsbench.Domain
 	idx        map[string]int
@@ -43,7 +43,7 @@ type statusTracker struct {
 	doneCh     chan struct{}
 }
 
-func newStatusTracker(domains []dnsbench.Domain, numServers, queries int) *statusTracker {
+func NewStatusTracker(domains []dnsbench.Domain, numServers, queries int) *StatusTracker {
 	idx := make(map[string]int, len(domains))
 	for i, d := range domains {
 		idx[d.Name] = i
@@ -71,7 +71,7 @@ func newStatusTracker(domains []dnsbench.Domain, numServers, queries int) *statu
 	}
 
 	perTotal := numServers * queries
-	return &statusTracker{
+	return &StatusTracker{
 		domains:  domains,
 		idx:      idx,
 		done:     make([]int, len(domains)),
@@ -85,7 +85,7 @@ func newStatusTracker(domains []dnsbench.Domain, numServers, queries int) *statu
 }
 
 // Progress 在每次查询完成后被调用（来自多个 goroutine）。
-func (t *statusTracker) Progress(domain string) {
+func (t *StatusTracker) Progress(domain string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if i, ok := t.idx[domain]; ok {
@@ -101,7 +101,7 @@ func (t *statusTracker) Progress(domain string) {
 }
 
 // Start 开始展示。TTY 下启动定时刷新协程；非 TTY 下打印一次静态表。
-func (t *statusTracker) Start() {
+func (t *StatusTracker) Start() {
 	if !t.isTTY {
 		t.printSnapshot()
 		return
@@ -125,7 +125,7 @@ func (t *statusTracker) Start() {
 }
 
 // Stop 结束展示并做最终渲染。
-func (t *statusTracker) Stop() {
+func (t *StatusTracker) Stop() {
 	if !t.isTTY {
 		t.printSnapshot()
 		return
@@ -136,7 +136,7 @@ func (t *statusTracker) Stop() {
 }
 
 // draw 在 TTY 下原地重绘整张表。
-func (t *statusTracker) draw() {
+func (t *StatusTracker) draw() {
 	t.mu.Lock()
 	lines := t.renderLocked()
 	prev := t.lines
@@ -155,7 +155,7 @@ func (t *statusTracker) draw() {
 }
 
 // printSnapshot 非 TTY 下一次性打印当前表格。
-func (t *statusTracker) printSnapshot() {
+func (t *StatusTracker) printSnapshot() {
 	t.mu.Lock()
 	lines := t.renderLocked()
 	t.mu.Unlock()
@@ -164,7 +164,7 @@ func (t *statusTracker) printSnapshot() {
 
 // renderLocked 渲染表格为行切片（调用方须持有锁）。
 // 各分类并列成列组（域名 | 状态），以减少纵向高度。
-func (t *statusTracker) renderLocked() []string {
+func (t *StatusTracker) renderLocked() []string {
 	var buf bytes.Buffer
 	table := tablewriter.NewWriter(&buf)
 
