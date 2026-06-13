@@ -36,7 +36,7 @@ func TestSystemDNSFromResolvConfMissing(t *testing.T) {
 }
 
 func TestBuildSystemServers(t *testing.T) {
-	// 去重 + 过滤非法 + 命名编号。
+	// Dedupe + filter invalid + numbered naming.
 	servers := buildSystemServers([]string{"1.1.1.1", "1.1.1.1", "", "not-an-ip", "8.8.8.8"})
 	if len(servers) != 2 {
 		t.Fatalf("expected 2 servers, got %d: %+v", len(servers), servers)
@@ -46,17 +46,17 @@ func TestBuildSystemServers(t *testing.T) {
 			t.Fatalf("unexpected server fields: %+v", s)
 		}
 	}
-	if servers[0].Name != "当前默认 DNS 1" || servers[1].Name != "当前默认 DNS 2" {
+	if servers[0].Name != "Current default DNS 1" || servers[1].Name != "Current default DNS 2" {
 		t.Fatalf("unexpected names: %q, %q", servers[0].Name, servers[1].Name)
 	}
 
-	// 单个时不编号。
+	// A single server is not numbered.
 	single := buildSystemServers([]string{"9.9.9.9"})
-	if len(single) != 1 || single[0].Name != "当前默认 DNS" {
+	if len(single) != 1 || single[0].Name != "Current default DNS" {
 		t.Fatalf("unexpected single server: %+v", single)
 	}
 
-	// 全非法 → 空。
+	// All invalid -> nil.
 	if got := buildSystemServers([]string{"", "x"}); got != nil {
 		t.Fatalf("expected nil, got %v", got)
 	}

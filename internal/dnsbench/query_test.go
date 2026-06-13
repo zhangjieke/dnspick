@@ -12,7 +12,7 @@ import (
 	"github.com/miekg/dns"
 )
 
-// startTestDNS 启动一个本地 UDP DNS 服务器，按 handler 应答，返回监听地址。
+// startTestDNS starts a local UDP DNS server that replies via handler and returns its listen address.
 func startTestDNS(t *testing.T, handler dns.HandlerFunc) string {
 	t.Helper()
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -74,7 +74,7 @@ func TestReusableExchangeServfail(t *testing.T) {
 func TestDohQuery(t *testing.T) {
 	client := &http.Client{Timeout: time.Second}
 
-	// dnsWireReply 解析请求中的 wire-format 查询，构造对应 Rcode 的应答报文。
+	// dnsWireReply parses the wire-format query from the request and builds a reply message with the given Rcode.
 	dnsWireReply := func(t *testing.T, r *http.Request, rcode int) []byte {
 		t.Helper()
 		body, _ := io.ReadAll(r.Body)

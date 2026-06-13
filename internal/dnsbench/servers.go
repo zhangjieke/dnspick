@@ -1,31 +1,49 @@
-// Package dnsbench 提供对 DNS 服务器的并发基准测试引擎：
-// 并发查询、连接复用、结果聚合与评分。它不包含任何命令行/终端展示逻辑。
+// Package dnsbench provides a concurrent benchmarking engine for DNS servers:
+// concurrent queries, connection reuse, result aggregation and scoring. It
+// contains no command-line or terminal presentation logic.
 package dnsbench
 
-// 支持的协议。
+import "github.com/palemoky/dnspick/internal/i18n"
+
+// Supported protocols.
 const (
 	UDP = "udp"
 	DOT = "dot"
 	DOH = "doh"
 )
 
-// Server 描述一个待测试的 DNS 服务器。
+// Server describes a DNS server to be tested.
 type Server struct {
 	Name, Address, Protocol string
-	IsSystem                bool // 是否为检测到的系统当前默认 DNS
+	IsSystem                bool // whether this is the detected system default DNS
 }
 
-// 域名分类。
+// Domain categories. These are stable internal keys; use CategoryLabel for
+// localized display text.
 const (
-	CategoryDomestic = "国内"
-	CategoryForeign  = "国外"
-	CategoryCustom   = "自定义"
+	CategoryDomestic = "domestic"
+	CategoryForeign  = "foreign"
+	CategoryCustom   = "custom"
 )
 
-// Domain 是一个带分类的测试域名。
+// CategoryLabel returns the localized display label for a category key.
+func CategoryLabel(category string) string {
+	switch category {
+	case CategoryDomestic:
+		return i18n.L().CatDomestic
+	case CategoryForeign:
+		return i18n.L().CatForeign
+	case CategoryCustom:
+		return i18n.L().CatCustom
+	default:
+		return category
+	}
+}
+
+// Domain is a test domain with its category.
 type Domain struct{ Name, Category string }
 
-// DefaultServers 是内置的默认 DNS 服务器列表。
+// DefaultServers is the built-in list of default DNS servers.
 var DefaultServers = []Server{
 	{Name: "AliDNS 1 (UDP)", Address: "223.5.5.5", Protocol: UDP},
 	{Name: "AliDNS 2 (UDP)", Address: "223.6.6.6", Protocol: UDP},
@@ -52,7 +70,7 @@ var DefaultServers = []Server{
 	{Name: "Cloudflare (DoT)", Address: "one.one.one.one", Protocol: DOT},
 	{Name: "Quad9 (DoT)", Address: "dns.quad9.net", Protocol: DOT},
 
-	// 统一使用 RFC 8484 标准的 /dns-query 端点（wire-format，application/dns-message）。
+	// All DoH servers use the RFC 8484 standard /dns-query endpoint (wire-format, application/dns-message).
 	{Name: "AliDNS (DoH)", Address: "https://dns.alidns.com/dns-query", Protocol: DOH},
 	{Name: "DNSPod (DoH)", Address: "https://doh.pub/dns-query", Protocol: DOH},
 	{Name: "Cloudflare (DoH)", Address: "https://cloudflare-dns.com/dns-query", Protocol: DOH},
@@ -60,7 +78,7 @@ var DefaultServers = []Server{
 	{Name: "Quad9 (DoH)", Address: "https://dns.quad9.net/dns-query", Protocol: DOH},
 }
 
-// DefaultDomains 是内置的默认测试域名列表（按分类均衡精选，去除同公司重复域名）。
+// DefaultDomains is the built-in list of test domains (a balanced selection per category, deduplicated across same-company domains).
 var DefaultDomains = []Domain{
 	{"baidu.com", CategoryDomestic},
 	{"qq.com", CategoryDomestic},

@@ -64,7 +64,7 @@ func TestCalculateScores(t *testing.T) {
 	if len(res) != 4 {
 		t.Fatalf("expected 4 results, got %d", len(res))
 	}
-	// 排序后应为评分降序。
+	// After sorting, results should be in descending score order.
 	for i := 1; i < len(res); i++ {
 		if res[i-1].Score < res[i].Score {
 			t.Fatalf("results not sorted by score desc: %+v", res)
@@ -77,13 +77,13 @@ func TestCalculateScores(t *testing.T) {
 		t.Fatalf("expected dead last, got %q", res[len(res)-1].Name)
 	}
 
-	// dead 服务器：无成功，评分与平均延迟应为 0。
+	// dead server: no successes, so score and avg latency should be 0.
 	dead := res[len(res)-1]
 	if dead.Score != 0 || dead.AvgTime != 0 || dead.SuccessRate != 0 {
 		t.Fatalf("dead server should be all-zero, got %+v", dead)
 	}
 
-	// fast 的平均延迟应为 10ms（20ms/2 成功）。
+	// fast's avg latency should be 10ms (20ms / 2 successes).
 	if res[0].AvgTime != 10*time.Millisecond {
 		t.Fatalf("fast AvgTime=%v, want 10ms", res[0].AvgTime)
 	}

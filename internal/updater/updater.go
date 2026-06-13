@@ -1,4 +1,5 @@
-// Package updater 实现从 GitHub Releases 检查并原地更新 dnspick 自身。
+// Package updater checks for and applies in-place updates of dnspick itself
+// from GitHub Releases.
 package updater
 
 import (
@@ -24,21 +25,21 @@ const (
 	app   = "dnspick"
 )
 
-// release 是 GitHub API 返回的 release 信息的子集。
+// release is the subset of GitHub API release fields we use.
 type release struct {
 	TagName string `json:"tag_name"`
 	HTMLURL string `json:"html_url"`
 }
 
-// CheckResult 描述一次更新检查的结论。
+// CheckResult describes the outcome of an update check.
 type CheckResult struct {
-	Current   string // 当前版本（可能是 "dev"）
-	Latest    string // 最新发布版本，例如 v2.1.0
-	HasUpdate bool   // 是否存在可用的更新
-	URL       string // 最新 release 页面地址
+	Current   string // current version (may be "dev")
+	Latest    string // latest released version, e.g. v2.1.0
+	HasUpdate bool   // whether an update is available
+	URL       string // URL of the latest release page
 }
 
-// Check 查询 GitHub 上最新的 release 并与 current 比较。
+// Check queries the latest release on GitHub and compares it to current.
 func Check(ctx context.Context, current string) (*CheckResult, error) {
 	rel, err := latestRelease(ctx)
 	if err != nil {
@@ -52,8 +53,9 @@ func Check(ctx context.Context, current string) (*CheckResult, error) {
 	}, nil
 }
 
-// Update 检查并在有新版本时原地替换当前可执行文件。
-// 返回更新到的版本号；若已是最新则 updated=false。
+// Update checks for and, when a newer version exists, replaces the current
+// executable in place. Returns the version updated to; if already up to date,
+// updated is false.
 func Update(ctx context.Context, current string) (latest string, updated bool, err error) {
 	res, err := Check(ctx, current)
 	if err != nil {
@@ -68,17 +70,17 @@ func Update(ctx context.Context, current string) (latest string, updated bool, e
 		return res.Latest, false, err
 	}
 	if err := selfupdate.Apply(bytes.NewReader(bin), selfupdate.Options{}); err != nil {
-		// 失败时尝试回滚到原文件。
+		// On failure, attempt to roll back to the original file.
 		if rerr := selfupdate.RollbackError(err); rerr != nil {
-			return res.Latest, false, fmt.Errorf("更新失败且回滚失败: %w", rerr)
+			return res.Latest, false, fmt.Errorf("update failed and rollback failed: %w", rerr)
 		}
-		return res.Latest, false, fmt.Errorf("更新失败（已回滚）: %w", err)
+		return res.Latest, false, fmt.Errorf("update failed (rolled back): %w", err)
 	}
 	return res.Latest, true, nil
 }
 
-// isNewer 判断 latest 是否比 current 更新。
-// current 非合法 semver（如 "dev" 或脏构建）时一律视为可更新。
+// isNewer reports whether latest is newer than current. When current is not a
+// valid semver (e.g. "dev" or a dirty build), an update is always assumed.
 func isNewer(current, latest string) bool {
 	if !semver.IsValid(current) {
 		return true
@@ -96,24 +98,25 @@ func latestRelease(ctx context.Context) (*release, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("查询最新版本失败: %w", err)
+		return nil, fmt.Errorf("failed to query the latest release: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("查询最新版本失败: GitHub 返回 %s", resp.Status)
+		return nil, fmt.Errorf("failed to query the latest release: GitHub returned %s", resp.Status)
 	}
 
 	var rel release
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return nil, fmt.Errorf("解析版本信息失败: %w", err)
+		return nil, fmt.Errorf("failed to parse release info: %w", err)
 	}
 	if rel.TagName == "" {
-		return nil, fmt.Errorf("未找到任何发布版本")
+		return nil, fmt.Errorf("no release found")
 	}
 	return &rel, nil
 }
 
-// downloadBinary 下载指定版本对应当前平台的归档，并解出其中的可执行文件。
+// downloadBinary downloads the archive for the given version matching the
+// current platform and extracts the executable from it.
 func downloadBinary(ctx context.Context, tag string) ([]byte, error) {
 	base := fmt.Sprintf("%s-%s-%s", app, runtime.GOOS, runtime.GOARCH)
 	isZip := runtime.GOOS == "windows"
@@ -129,15 +132,15 @@ func downloadBinary(ctx context.Context, tag string) ([]byte, error) {
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("下载更新包失败: %w", err)
+		return nil, fmt.Errorf("failed to download the update package: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("下载更新包失败: %s 返回 %s", asset, resp.Status)
+		return nil, fmt.Errorf("failed to download the update package: %s returned %s", asset, resp.Status)
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("读取更新包失败: %w", err)
+		return nil, fmt.Errorf("failed to read the update package: %w", err)
 	}
 
 	if isZip {
@@ -146,11 +149,12 @@ func downloadBinary(ctx context.Context, tag string) ([]byte, error) {
 	return binaryFromTarGz(data)
 }
 
-// binaryFromTarGz 返回 tar.gz 中第一个常规文件的内容（归档内仅含单个二进制）。
+// binaryFromTarGz returns the contents of the first regular file in the tar.gz
+// (the archive contains a single binary).
 func binaryFromTarGz(data []byte) ([]byte, error) {
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("解压更新包失败: %w", err)
+		return nil, fmt.Errorf("failed to decompress the update package: %w", err)
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
@@ -160,20 +164,20 @@ func binaryFromTarGz(data []byte) ([]byte, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("解压更新包失败: %w", err)
+			return nil, fmt.Errorf("failed to decompress the update package: %w", err)
 		}
 		if hdr.Typeflag == tar.TypeReg {
 			return io.ReadAll(tr)
 		}
 	}
-	return nil, fmt.Errorf("更新包中未找到可执行文件")
+	return nil, fmt.Errorf("no executable found in the update package")
 }
 
-// binaryFromZip 返回 zip 中第一个 .exe 文件的内容。
+// binaryFromZip returns the contents of the first .exe file in the zip.
 func binaryFromZip(data []byte) ([]byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, fmt.Errorf("解压更新包失败: %w", err)
+		return nil, fmt.Errorf("failed to decompress the update package: %w", err)
 	}
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() {
@@ -181,17 +185,17 @@ func binaryFromZip(data []byte) ([]byte, error) {
 		}
 		rc, err := f.Open()
 		if err != nil {
-			return nil, fmt.Errorf("解压更新包失败: %w", err)
+			return nil, fmt.Errorf("failed to decompress the update package: %w", err)
 		}
 		b, err := io.ReadAll(rc)
 		rc.Close()
 		if err != nil {
-			return nil, fmt.Errorf("读取更新包失败: %w", err)
+			return nil, fmt.Errorf("failed to read the update package: %w", err)
 		}
 		return b, nil
 	}
-	return nil, fmt.Errorf("更新包中未找到可执行文件")
+	return nil, fmt.Errorf("no executable found in the update package")
 }
 
-// DefaultTimeout 是一次检查/更新操作的建议超时。
+// DefaultTimeout is the suggested timeout for a check/update operation.
 const DefaultTimeout = 60 * time.Second

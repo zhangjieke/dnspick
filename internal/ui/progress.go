@@ -14,30 +14,33 @@ import (
 	"golang.org/x/term"
 
 	"github.com/palemoky/dnspick/internal/dnsbench"
+	"github.com/palemoky/dnspick/internal/i18n"
 )
 
-// catGroup 是按分类聚合的一组域名（indices 指向 StatusTracker.domains/done）。
+// catGroup is a group of domains aggregated by category (indices point into
+// StatusTracker.domains/done). category is the stable category key.
 type catGroup struct {
-	name    string
-	indices []int
+	category string
+	indices  []int
 }
 
-// StatusTracker 维护每个域名的测试进度，并以分类表格的形式实时展示：
-// 未开始显示 "-"，进行中显示百分比，完成显示 "✔"。
-// 在 TTY 下原地刷新；非 TTY（管道/CI）下降级为静态表 + 周期性百分比。
+// StatusTracker tracks the test progress of every domain and displays it live
+// as a categorized table: not-started shows "-", in-progress shows a percentage,
+// done shows "✔". On a TTY it refreshes in place; on a non-TTY (pipe/CI) it
+// degrades to a static table plus periodic percentages.
 type StatusTracker struct {
 	mu         sync.Mutex
 	domains    []dnsbench.Domain
 	idx        map[string]int
 	done       []int
-	groups     []catGroup // 各分类并列展示
-	maxRows    int        // 最大分组域名数（决定表格行数）
-	perTotal   int        // 单个域名的总查询次数 = 服务器数 * 每域查询次数
-	grand      int        // 所有查询总数
+	groups     []catGroup // categories displayed side by side
+	maxRows    int        // largest group size (determines table row count)
+	perTotal   int        // total queries per domain = servers * queries per domain
+	grand      int        // total number of queries
 	completed  int
 	isTTY      bool
-	lines      int // 上一次渲染的行数（TTY 原地刷新用）
-	lastBucket int // 非 TTY：上次打印的 10% 档位
+	lines      int // number of lines rendered last time (for in-place TTY refresh)
+	lastBucket int // non-TTY: last printed 10% bucket
 	out        io.Writer
 	stop       chan struct{}
 	doneCh     chan struct{}
@@ -49,13 +52,13 @@ func NewStatusTracker(domains []dnsbench.Domain, numServers, queries int) *Statu
 		idx[d.Name] = i
 	}
 
-	// 按分类聚合，保持首次出现顺序，供并列展示。
+	// Aggregate by category, preserving first-seen order, for side-by-side display.
 	var order []string
 	gmap := make(map[string]*catGroup)
 	for i, d := range domains {
 		g, ok := gmap[d.Category]
 		if !ok {
-			g = &catGroup{name: d.Category}
+			g = &catGroup{category: d.Category}
 			gmap[d.Category] = g
 			order = append(order, d.Category)
 		}
@@ -84,7 +87,7 @@ func NewStatusTracker(domains []dnsbench.Domain, numServers, queries int) *Statu
 	}
 }
 
-// Progress 在每次查询完成后被调用（来自多个 goroutine）。
+// Progress is called after each completed query (from multiple goroutines).
 func (t *StatusTracker) Progress(domain string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -95,12 +98,13 @@ func (t *StatusTracker) Progress(domain string) {
 	if !t.isTTY && t.grand > 0 {
 		if bucket := t.completed * 10 / t.grand; bucket > t.lastBucket {
 			t.lastBucket = bucket
-			fmt.Fprintf(t.out, "  测试进度: %d%%\n", bucket*10)
+			fmt.Fprintf(t.out, i18n.L().ProgressPercent, bucket*10)
 		}
 	}
 }
 
-// Start 开始展示。TTY 下启动定时刷新协程；非 TTY 下打印一次静态表。
+// Start begins the display. On a TTY it launches a periodic refresh goroutine;
+// on a non-TTY it prints the static table once.
 func (t *StatusTracker) Start() {
 	if !t.isTTY {
 		t.printSnapshot()
@@ -124,7 +128,7 @@ func (t *StatusTracker) Start() {
 	}()
 }
 
-// Stop 结束展示并做最终渲染。
+// Stop ends the display and performs a final render.
 func (t *StatusTracker) Stop() {
 	if !t.isTTY {
 		t.printSnapshot()
@@ -135,7 +139,7 @@ func (t *StatusTracker) Stop() {
 	t.draw()
 }
 
-// draw 在 TTY 下原地重绘整张表。
+// draw redraws the whole table in place on a TTY.
 func (t *StatusTracker) draw() {
 	t.mu.Lock()
 	lines := t.renderLocked()
@@ -145,16 +149,16 @@ func (t *StatusTracker) draw() {
 
 	var b strings.Builder
 	if prev > 0 {
-		fmt.Fprintf(&b, "\033[%dA", prev) // 光标上移 prev 行
+		fmt.Fprintf(&b, "\033[%dA", prev) // move cursor up prev lines
 	}
 	for _, ln := range lines {
 		b.WriteString(ln)
-		b.WriteString("\033[K\n") // 清除行尾残留
+		b.WriteString("\033[K\n") // clear any leftover at end of line
 	}
 	fmt.Fprint(t.out, b.String())
 }
 
-// printSnapshot 非 TTY 下一次性打印当前表格。
+// printSnapshot prints the current table once on a non-TTY.
 func (t *StatusTracker) printSnapshot() {
 	t.mu.Lock()
 	lines := t.renderLocked()
@@ -162,15 +166,16 @@ func (t *StatusTracker) printSnapshot() {
 	fmt.Fprintln(t.out, strings.Join(lines, "\n"))
 }
 
-// renderLocked 渲染表格为行切片（调用方须持有锁）。
-// 各分类并列成列组（域名 | 状态），以减少纵向高度。
+// renderLocked renders the table into a slice of lines (the caller must hold
+// the lock). Categories are laid out side by side as column groups (domain |
+// status) to reduce vertical height.
 func (t *StatusTracker) renderLocked() []string {
 	var buf bytes.Buffer
 	table := tablewriter.NewWriter(&buf)
 
 	header := make([]string, 0, len(t.groups)*2)
 	for _, g := range t.groups {
-		header = append(header, g.name, "状态")
+		header = append(header, dnsbench.CategoryLabel(g.category), i18n.L().StatusCol)
 	}
 	table.Header(header)
 
@@ -192,12 +197,12 @@ func (t *StatusTracker) renderLocked() []string {
 	if t.grand > 0 {
 		pct = t.completed * 100 / t.grand
 	}
-	lines := []string{fmt.Sprintf("测试进度: %d%% (%d/%d)", pct, t.completed, t.grand)}
+	lines := []string{fmt.Sprintf(i18n.L().ProgressLine, pct, t.completed, t.grand)}
 	lines = append(lines, strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")...)
 	return lines
 }
 
-// statusCell 根据完成情况返回带颜色的状态文本。
+// statusCell returns colored status text based on completion.
 func statusCell(done, total int) string {
 	switch {
 	case done <= 0:

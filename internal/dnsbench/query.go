@@ -13,11 +13,12 @@ import (
 	"github.com/miekg/dns"
 )
 
-// querier 执行一次对某域名的查询并返回耗时。
+// querier performs a single query for a domain and returns how long it took.
 type querier func(domain string) (time.Duration, error)
 
-// newQuerier 为某个服务器构造一个可复用的查询函数及其清理函数。
-// 服务器主机名在此处预先解析为 IP，避免把系统 DNS 的解析耗时计入测量。
+// newQuerier builds a reusable query function and its cleanup function for a
+// server. The server hostname is resolved to an IP up front so that the system
+// DNS resolution time is not counted in the measurement.
 func newQuerier(server Server, timeout time.Duration) (querier, func()) {
 	switch server.Protocol {
 	case UDP:
@@ -45,15 +46,17 @@ func newQuerier(server Server, timeout time.Duration) (querier, func()) {
 
 	default:
 		q := func(domain string) (time.Duration, error) {
-			return 0, fmt.Errorf("不支持的协议: %s", server.Protocol)
+			return 0, fmt.Errorf("unsupported protocol: %s", server.Protocol)
 		}
 		return q, func() {}
 	}
 }
 
-// reusableExchange 维护一条持久连接（UDP socket 或 DoT 的 TLS 连接），
-// 在多次查询间复用，使各次测量只反映单次查询往返而非每次重新握手。
-// 连接失效时会自动重连重试一次。同一 querier 仅在单个 goroutine 中顺序使用，无需加锁。
+// reusableExchange maintains a persistent connection (a UDP socket or DoT TLS
+// connection) reused across queries, so each measurement reflects a single
+// query round-trip rather than a fresh handshake every time. A broken
+// connection is reconnected and retried once. A querier is used sequentially
+// within a single goroutine, so no locking is needed.
 func reusableExchange(client *dns.Client, addr string) (querier, func()) {
 	var conn *dns.Conn
 
@@ -76,7 +79,7 @@ func reusableExchange(client *dns.Client, addr string) (querier, func()) {
 		start := time.Now()
 		r, err := exchange(m)
 		if err != nil {
-			// 连接可能已被对端关闭，丢弃后重连重试一次。
+			// The connection may have been closed by the peer; drop it and retry once.
 			if conn != nil {
 				conn.Close()
 				conn = nil
@@ -93,7 +96,7 @@ func reusableExchange(client *dns.Client, addr string) (querier, func()) {
 			return elapsed, err
 		}
 		if r.Rcode != dns.RcodeSuccess {
-			return elapsed, fmt.Errorf("DNS 响应码 %s", dns.RcodeToString[r.Rcode])
+			return elapsed, fmt.Errorf("DNS response code %s", dns.RcodeToString[r.Rcode])
 		}
 		return elapsed, nil
 	}
@@ -107,9 +110,11 @@ func reusableExchange(client *dns.Client, addr string) (querier, func()) {
 	return query, closeFn
 }
 
-// dohQuery 按 RFC 8484 以 wire-format(application/dns-message) 发起一次 DoH 查询，
-// 并校验返回的 DNS 报文（而不仅仅是 HTTP 状态码）。相比各家不一致的 JSON 方言，
-// wire-format 是 DoH 标准，所有服务器在 /dns-query 端点均支持。
+// dohQuery sends a single DoH query per RFC 8484 in wire-format
+// (application/dns-message) and validates the returned DNS message (not just
+// the HTTP status code). Unlike the inconsistent JSON dialects across vendors,
+// wire-format is the DoH standard and is supported by every server on the
+// /dns-query endpoint.
 func dohQuery(client *http.Client, endpoint, domain string) error {
 	q := new(dns.Msg)
 	q.SetQuestion(dns.Fqdn(domain), dns.TypeA)
@@ -132,7 +137,7 @@ func dohQuery(client *http.Client, endpoint, domain string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, resp.Body) // 读完以便连接复用
+		io.Copy(io.Discard, resp.Body) // drain so the connection can be reused
 		return fmt.Errorf("HTTP status %d", resp.StatusCode)
 	}
 
@@ -142,15 +147,15 @@ func dohQuery(client *http.Client, endpoint, domain string) error {
 	}
 	var r dns.Msg
 	if err := r.Unpack(body); err != nil {
-		return fmt.Errorf("解析 DoH 响应失败: %w", err)
+		return fmt.Errorf("failed to parse DoH response: %w", err)
 	}
 	if r.Rcode != dns.RcodeSuccess {
-		return fmt.Errorf("DNS 响应码 %s", dns.RcodeToString[r.Rcode])
+		return fmt.Errorf("DNS response code %s", dns.RcodeToString[r.Rcode])
 	}
 	return nil
 }
 
-// resolveHost 把主机名解析为 IP；若本身已是 IP 或解析失败，则原样返回。
+// resolveHost resolves a hostname to an IP; if it is already an IP or resolution fails, it is returned unchanged.
 func resolveHost(host string, timeout time.Duration) string {
 	if net.ParseIP(host) != nil {
 		return host

@@ -10,12 +10,13 @@ import (
 	"github.com/olekukonko/tablewriter"
 
 	"github.com/palemoky/dnspick/internal/dnsbench"
+	"github.com/palemoky/dnspick/internal/i18n"
 )
 
-// PrintResultsTable 使用 tablewriter 打印漂亮的结果表格。
+// PrintResultsTable prints a formatted result table using tablewriter.
 func PrintResultsTable(results []dnsbench.Result) {
 	table := tablewriter.NewWriter(os.Stdout)
-	table.Header([]string{"#", "DNS服务器", "地址", "平均延迟", "成功率", "综合评分"})
+	table.Header(i18n.L().TableCol)
 
 	green := color.New(color.FgGreen).SprintFunc()
 	red := color.New(color.FgRed).SprintFunc()
@@ -30,7 +31,7 @@ func PrintResultsTable(results []dnsbench.Result) {
 
 		name := r.Name
 		if r.IsSystem {
-			name += " (当前)"
+			name += i18n.L().SystemSuffix
 		}
 		table.Append([]string{
 			fmt.Sprintf("%d", i+1),
@@ -44,7 +45,7 @@ func PrintResultsTable(results []dnsbench.Result) {
 	table.Render()
 }
 
-// PrintRecommendations 打印 Top 推荐。
+// PrintRecommendations prints the top recommendations.
 func PrintRecommendations(results []dnsbench.Result) {
 	palette := []*color.Color{
 		color.New(color.FgGreen, color.Bold),
@@ -59,7 +60,7 @@ func PrintRecommendations(results []dnsbench.Result) {
 			continue
 		}
 		palette[found].Printf("#%d: %s (%s)\n", found+1, best.Name, best.Address)
-		fmt.Printf("    综合评分: %.2f, 平均延迟: %s, 成功率: %.1f%%\n",
+		fmt.Printf(i18n.L().RecommendLine,
 			best.Score, best.AvgTime.Round(time.Microsecond).String(), best.SuccessRate*100)
 		found++
 		if found >= len(palette) {
@@ -67,7 +68,7 @@ func PrintRecommendations(results []dnsbench.Result) {
 		}
 	}
 	if found == 0 {
-		red.Println("没有找到表现足够好的DNS服务器，请检查网络连接。")
+		red.Println(i18n.L().NoGoodDNS)
 	}
 
 	if msg, ok := systemDNSVerdict(results); ok {
@@ -81,16 +82,20 @@ func PrintRecommendations(results []dnsbench.Result) {
 }
 
 const (
-	// switchLatencyThreshold：系统 DNS 比最优慢不足此值时视为无意义差异，不建议切换。
+	// switchLatencyThreshold: if the system DNS is slower than the best by less
+	// than this, the gap is treated as insignificant and no switch is suggested.
 	switchLatencyThreshold = 15 * time.Millisecond
-	// switchSuccessMargin：系统 DNS 成功率落后最优超过此值时，即便延迟接近也建议切换。
+	// switchSuccessMargin: if the system DNS success rate trails the best by more
+	// than this, a switch is suggested even when latency is close.
 	switchSuccessMargin = 0.05
 )
 
-// systemDNSVerdict 针对系统当前默认 DNS 给出是否需要调整的结论。
-// 仅当系统 DNS 明显更慢（延迟差 ≥ switchLatencyThreshold）或可靠性明显更差时才建议切换，
-// 避免因几毫秒的无意义差异误导用户。若结果中不含系统 DNS，则 ok 为 false。
-// results 须按评分降序排列。
+// systemDNSVerdict produces a conclusion on whether the system default DNS
+// should be changed. A switch is only suggested when the system DNS is clearly
+// slower (latency gap >= switchLatencyThreshold) or clearly less reliable,
+// avoiding misleading the user over a few insignificant milliseconds. If the
+// results contain no system DNS, ok is false. results must be sorted by score
+// in descending order.
 func systemDNSVerdict(results []dnsbench.Result) (msg string, ok bool) {
 	if len(results) == 0 {
 		return "", false
@@ -111,18 +116,16 @@ func systemDNSVerdict(results []dnsbench.Result) (msg string, ok bool) {
 	latencyGap := sys.AvgTime - best.AvgTime
 	closeEnough := latencyGap < switchLatencyThreshold && best.SuccessRate-sys.SuccessRate <= switchSuccessMargin
 
+	m := i18n.L()
 	switch {
 	case sys.Successes == 0:
-		return fmt.Sprintf("⚠️  当前默认 DNS (%s) 查询全部失败，建议切换到 #1 %s (%s)。",
-			sys.Address, best.Name, best.Address), true
+		return fmt.Sprintf(m.VerdictAllFailed, sys.Address, best.Name, best.Address), true
 	case sysRank == 0:
-		return fmt.Sprintf("✅ 当前默认 DNS (%s) 已是最优，无需调整。", sys.Address), true
+		return fmt.Sprintf(m.VerdictBest, sys.Address), true
 	case closeEnough:
-		return fmt.Sprintf("✅ 当前默认 DNS (%s) 已足够好（排名第 %d，仅慢 %s），无需调整。",
-			sys.Address, sysRank+1, latencyGap.Round(time.Microsecond)), true
+		return fmt.Sprintf(m.VerdictGoodEnough, sys.Address, sysRank+1, latencyGap.Round(time.Microsecond)), true
 	default:
-		return fmt.Sprintf("⚠️  当前默认 DNS (%s) 排名第 %d，建议切换到 #1 %s (%s)：平均延迟 %s → %s。",
-			sys.Address, sysRank+1, best.Name, best.Address,
+		return fmt.Sprintf(m.VerdictSwitch, sys.Address, sysRank+1, best.Name, best.Address,
 			sys.AvgTime.Round(time.Microsecond), best.AvgTime.Round(time.Microsecond)), true
 	}
 }

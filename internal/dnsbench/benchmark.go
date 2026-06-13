@@ -7,32 +7,32 @@ import (
 	"time"
 )
 
-// Options 控制一次基准测试的行为。
+// Options controls a single benchmark run.
 type Options struct {
-	Servers     []Server      // 待测试的服务器；为空时使用 DefaultServers
-	Domains     []Domain      // 测试域名
-	Queries     int           // 每个域名的查询次数
-	Timeout     time.Duration // 单次查询超时
-	Concurrency int           // 同时测试的服务器数量上限
+	Servers     []Server      // servers to test; uses DefaultServers when empty
+	Domains     []Domain      // test domains
+	Queries     int           // number of queries per domain
+	Timeout     time.Duration // timeout per query
+	Concurrency int           // maximum number of servers tested concurrently
 }
 
-// Result 是单个 DNS 服务器的最终测试结果。
+// Result is the final benchmark result for a single DNS server.
 type Result struct {
 	Name, Address      string
 	AvgTime            time.Duration
 	SuccessRate, Score float64
 	Successes, Total   int
-	IsSystem           bool // 是否为系统当前默认 DNS
+	IsSystem           bool // whether this is the system default DNS
 }
 
-// queryResult 是单次查询的原始结果。
+// queryResult is the raw result of a single query.
 type queryResult struct {
 	server   Server
 	duration time.Duration
 	err      error
 }
 
-// serverStat 聚合单个 DNS 服务器的测试数据。
+// serverStat aggregates the benchmark data for a single DNS server.
 type serverStat struct {
 	totalTime time.Duration
 	successes int
@@ -41,8 +41,8 @@ type serverStat struct {
 	isSystem  bool
 }
 
-// ParseDomains 拆分、去空格并去重自定义域名列表，保持原始顺序。
-// 自定义域名统一归入 CategoryCustom 分类。
+// ParseDomains splits, trims and deduplicates a custom domain list, preserving
+// the original order. Custom domains are all assigned the CategoryCustom category.
 func ParseDomains(raw string) []Domain {
 	seen := make(map[string]struct{})
 	var domains []Domain
@@ -60,8 +60,9 @@ func ParseDomains(raw string) []Domain {
 	return domains
 }
 
-// Run 并发对所有服务器执行基准测试并返回按评分降序排列的结果。
-// progress 在每次查询完成后以该次查询的域名为参数被调用（可为 nil），用于驱动实时进度 UI。
+// Run benchmarks all servers concurrently and returns results sorted by score
+// in descending order. progress is called after each completed query with that
+// query's domain (may be nil); it drives the live progress UI.
 func Run(opts Options, progress func(domain string)) []Result {
 	servers := opts.Servers
 	if len(servers) == 0 {
@@ -72,9 +73,10 @@ func Run(opts Options, progress func(domain string)) []Result {
 	}
 	concurrency := max(opts.Concurrency, 1)
 
-	// 每个服务器一个 goroutine，内部顺序查询，从而复用连接（DoT/DoH）并
-	// 避免成千上万个请求同时打出导致互相争抢、污染延迟测量。
-	// 服务器级别的并发由 sem 限制。
+	// One goroutine per server, querying sequentially inside it, so connections
+	// (DoT/DoH) are reused and we avoid firing thousands of requests at once
+	// that would contend with each other and pollute the latency measurement.
+	// Server-level concurrency is bounded by sem.
 	totalQueries := len(servers) * len(opts.Domains) * opts.Queries
 	resultsChan := make(chan queryResult, totalQueries)
 	sem := make(chan struct{}, concurrency)
@@ -96,14 +98,15 @@ func Run(opts Options, progress func(domain string)) []Result {
 	return calculateScores(aggregateResults(resultsChan))
 }
 
-// benchmarkServer 对单个服务器顺序执行所有查询。
-// 先做一次不计入结果的预热查询，让 DoT/DoH 建立连接、缓存服务器域名解析，
-// 使各协议的测量进入稳定状态、更具可比性。
+// benchmarkServer runs all queries sequentially against a single server.
+// It first does one warm-up query (excluded from the results) so that DoT/DoH
+// establish their connections and the server hostname resolution is cached,
+// bringing each protocol's measurement into a steady, comparable state.
 func benchmarkServer(server Server, opts Options, ch chan<- queryResult, progress func(domain string)) {
 	q, closeFn := newQuerier(server, opts.Timeout)
 	defer closeFn()
 
-	// 预热（结果丢弃）。
+	// Warm-up (result discarded).
 	_, _ = q(opts.Domains[0].Name)
 
 	for _, domain := range opts.Domains {
@@ -115,7 +118,7 @@ func benchmarkServer(server Server, opts Options, ch chan<- queryResult, progres
 	}
 }
 
-// aggregateResults 负责从 channel 收集并聚合数据。
+// aggregateResults collects and aggregates data from the channel.
 func aggregateResults(resultsChan <-chan queryResult) map[string]*serverStat {
 	serverStats := make(map[string]*serverStat)
 	for result := range resultsChan {
@@ -133,7 +136,7 @@ func aggregateResults(resultsChan <-chan queryResult) map[string]*serverStat {
 	return serverStats
 }
 
-// calculateScores 计算最终的 Result 列表并按评分降序排序。
+// calculateScores computes the final Result list and sorts it by score in descending order.
 func calculateScores(serverStats map[string]*serverStat) []Result {
 	var results []Result
 	for name, stats := range serverStats {

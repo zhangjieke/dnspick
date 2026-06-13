@@ -1,17 +1,19 @@
-// Package buildinfo 保存编译期通过 -ldflags -X 注入的版本信息。
+// Package buildinfo holds version information injected at build time via
+// -ldflags -X.
 package buildinfo
 
 import "fmt"
 
-// 这些变量在构建时由 -ldflags "-X .../buildinfo.Version=..." 覆盖；
-// 直接 go run / go build（未注入）时保持以下默认值。
+// These variables are overridden at build time by
+// -ldflags "-X .../buildinfo.Version=..."; a plain go run / go build (no
+// injection) keeps the defaults below.
 var (
 	Version = "dev"
 	Commit  = "none"
 	Date    = "unknown"
 )
 
-// String 返回适合 `--version` 输出的一行描述。
+// String returns a one-line description suitable for `--version` output.
 func String() string {
 	return fmt.Sprintf("dnspick %s (commit %s, built %s)", Version, Commit, Date)
 }

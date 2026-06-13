@@ -8,10 +8,13 @@ import (
 	"strings"
 
 	"github.com/miekg/dns"
+
+	"github.com/palemoky/dnspick/internal/i18n"
 )
 
-// DetectSystemDNS 探测当前系统配置的默认 DNS 服务器（运营商或路由器下发），
-// 返回可参与基准测试的 Server 列表。无法检测时返回 nil（功能优雅跳过）。
+// DetectSystemDNS probes the system's configured default DNS servers (handed
+// out by the ISP or router) and returns Servers ready to be benchmarked.
+// Returns nil when detection is not possible (the feature degrades gracefully).
 func DetectSystemDNS() []Server {
 	var ips []string
 	if runtime.GOOS == "windows" {
@@ -22,7 +25,8 @@ func DetectSystemDNS() []Server {
 	return buildSystemServers(ips)
 }
 
-// buildSystemServers 把 IP 列表去重并转换为带 IsSystem 标记的 Server。
+// buildSystemServers deduplicates the IP list and converts it into Servers
+// flagged with IsSystem.
 func buildSystemServers(ips []string) []Server {
 	seen := make(map[string]struct{})
 	var servers []Server
@@ -37,18 +41,18 @@ func buildSystemServers(ips []string) []Server {
 		seen[ip] = struct{}{}
 		servers = append(servers, Server{Address: ip, Protocol: UDP, IsSystem: true})
 	}
-	// 命名：单个为「当前默认 DNS」，多个则编号。
+	// Naming: a single server is unnumbered, multiple servers are numbered.
 	for i := range servers {
 		if len(servers) == 1 {
-			servers[i].Name = "当前默认 DNS"
+			servers[i].Name = i18n.L().SystemDNSName
 		} else {
-			servers[i].Name = fmt.Sprintf("当前默认 DNS %d", i+1)
+			servers[i].Name = fmt.Sprintf(i18n.L().SystemDNSNameN, i+1)
 		}
 	}
 	return servers
 }
 
-// systemDNSFromResolvConf 解析 resolv.conf(5) 风格文件，返回 nameserver 列表。
+// systemDNSFromResolvConf parses a resolv.conf(5)-style file and returns its nameserver list.
 func systemDNSFromResolvConf(path string) []string {
 	cfg, err := dns.ClientConfigFromFile(path)
 	if err != nil {
@@ -57,7 +61,7 @@ func systemDNSFromResolvConf(path string) []string {
 	return cfg.Servers
 }
 
-// windowsDNS 通过 PowerShell 读取当前生效的 IPv4 DNS 服务器（best-effort）。
+// windowsDNS reads the currently effective IPv4 DNS servers via PowerShell (best-effort).
 func windowsDNS() []string {
 	cmd := exec.Command("powershell", "-NoProfile", "-Command",
 		"(Get-DnsClientServerAddress -AddressFamily IPv4).ServerAddresses")
