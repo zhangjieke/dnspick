@@ -16,7 +16,7 @@ Pick the DNS that fits you
 
 ---
 
-## ✨ Features
+## Features
 
 *   **Cross-platform**: Runs on Windows, macOS, Linux, Raspberry Pi (ARM/ARM64) and other mainstream platforms.
 *   **Multi-protocol**: Tests plain UDP DNS, DNS-over-TLS (DoT) and DNS-over-HTTPS (DoH, RFC 8484 wire-format) side by side.
@@ -29,7 +29,7 @@ Pick the DNS that fits you
 
 ---
 
-## 🖥️ Demo
+## Demo
 
 **While testing:**
 
@@ -76,7 +76,7 @@ Progress: 45% (594/1320)
 
 ---
 
-## 📦 Installation
+## Installation
 
 ### One-line install (recommended)
 
@@ -106,7 +106,7 @@ You can also download a prebuilt binary for your OS directly from the [GitHub Re
 
 For convenience, move the extracted executable into a directory on your system `PATH` (e.g. `/usr/local/bin` or `C:\Windows\System32`).
 
-### 🍎 macOS says "damaged / move to Trash"
+### macOS says "damaged / move to Trash"
 
 Because this tool is not notarized through Apple's paid program, macOS Gatekeeper blocks programs downloaded from the internet and shows messages like "cannot verify the developer" or "damaged and should be moved to the Trash". This is expected and the **file is not actually damaged**. Use any one of the following:
 
@@ -122,7 +122,7 @@ After that it runs normally, with no further prompts.
 
 ---
 
-## 🚀 Usage
+## Usage
 
 Just run it to start testing:
 ```bash
@@ -162,7 +162,7 @@ dnspick --json | jq '.recommendation.top'
 
 ---
 
-## 🤖 JSON output (for automation)
+## JSON output (for automation)
 
 Pass `--json` to get a single JSON document on **stdout**, suitable for scripts, crawlers and CI. Status messages are written to **stderr** and the live progress UI is suppressed, so stdout stays a clean, pipe-friendly JSON stream (`dnspick --json | jq ...`).
 
@@ -214,7 +214,7 @@ Pass `--json` to get a single JSON document on **stdout**, suitable for scripts,
 
 ---
 
-## 🧮 How is the composite score computed?
+## How is the composite score computed?
 
 The "Score" column in the results is a **relative score — higher is better** — used to weigh "fast" and "stable" together in a single table. The formula is:
 
