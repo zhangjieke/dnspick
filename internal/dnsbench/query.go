@@ -84,6 +84,7 @@ func reusableExchange(client *dns.Client, addr string) (querier, func()) {
 				conn.Close()
 				conn = nil
 			}
+			start = time.Now() // reset so the measurement reflects only the retry
 			r, err = exchange(m)
 		}
 		elapsed := time.Since(start)
@@ -137,7 +138,7 @@ func dohQuery(client *http.Client, endpoint, domain string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, resp.Body) // drain so the connection can be reused
+		io.Copy(io.Discard, io.LimitReader(resp.Body, 64*1024)) // drain so the connection can be reused
 		return fmt.Errorf("HTTP status %d", resp.StatusCode)
 	}
 
@@ -155,7 +156,8 @@ func dohQuery(client *http.Client, endpoint, domain string) error {
 	return nil
 }
 
-// resolveHost resolves a hostname to an IP; if it is already an IP or resolution fails, it is returned unchanged.
+// resolveHost resolves a hostname to an IP address, preferring IPv4; if it is
+// already an IP or resolution fails, it is returned unchanged.
 func resolveHost(host string, timeout time.Duration) string {
 	if net.ParseIP(host) != nil {
 		return host
@@ -165,6 +167,12 @@ func resolveHost(host string, timeout time.Duration) string {
 	addrs, err := net.DefaultResolver.LookupHost(ctx, host)
 	if err != nil || len(addrs) == 0 {
 		return host
+	}
+	// Prefer an IPv4 address so the benchmark works on IPv4-only networks.
+	for _, a := range addrs {
+		if ip := net.ParseIP(a); ip != nil && ip.To4() != nil {
+			return a
+		}
 	}
 	return addrs[0]
 }

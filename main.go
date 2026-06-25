@@ -27,9 +27,11 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "dnspick",
-	Version: buildinfo.Version,
-	Run:     runBenchmark,
+	Use:           "dnspick",
+	Version:       buildinfo.Version,
+	RunE:          runBenchmark,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 var versionCmd = &cobra.Command{
@@ -40,8 +42,8 @@ var versionCmd = &cobra.Command{
 }
 
 var updateCmd = &cobra.Command{
-	Use: "update",
-	Run: runUpdate,
+	Use:  "update",
+	RunE: runUpdate,
 }
 
 // setup wires up localized help text, flags and subcommands. It must run after
@@ -68,7 +70,7 @@ func setup() {
 	rootCmd.AddCommand(versionCmd, updateCmd)
 }
 
-func runUpdate(cmd *cobra.Command, args []string) {
+func runUpdate(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), updater.DefaultTimeout)
 	defer cancel()
 
@@ -76,17 +78,17 @@ func runUpdate(cmd *cobra.Command, args []string) {
 	fmt.Printf(m.UpdateChecking, buildinfo.Version)
 	latest, updated, err := updater.Update(ctx, buildinfo.Version)
 	if err != nil {
-		fmt.Println(m.UpdateFailed, err)
-		os.Exit(1)
+		return fmt.Errorf("%s %w", m.UpdateFailed, err)
 	}
 	if !updated {
 		fmt.Printf(m.UpdateUpToDate, latest)
-		return
+		return nil
 	}
 	fmt.Printf(m.UpdateDone, latest)
+	return nil
 }
 
-func runBenchmark(cmd *cobra.Command, args []string) {
+func runBenchmark(cmd *cobra.Command, args []string) error {
 	m := i18n.L()
 
 	// Domains: use the custom list when -d is given (classified as Custom),
@@ -96,14 +98,13 @@ func runBenchmark(cmd *cobra.Command, args []string) {
 		domains = dnsbench.ParseDomains(domainsStr)
 	}
 	if len(domains) == 0 {
-		fmt.Println(m.ErrNoDomains)
-		os.Exit(1)
+		return fmt.Errorf("%s", m.ErrNoDomains)
 	}
 
 	// Servers: built-in list + (unless disabled) the system default DNS.
 	servers := dnsbench.DefaultServers
 	if !noSystemDNS {
-		if sys := dnsbench.DetectSystemDNS(); len(sys) > 0 {
+		if sys := dnsbench.DetectSystemDNS(m.SystemDNSName, m.SystemDNSNameN); len(sys) > 0 {
 			servers = append(append([]dnsbench.Server{}, servers...), sys...)
 		}
 	}
@@ -121,11 +122,7 @@ func runBenchmark(cmd *cobra.Command, args []string) {
 	if jsonOutput {
 		fmt.Fprintf(os.Stderr, m.BenchStarting, len(servers), len(domains))
 		results := dnsbench.Run(opts, nil)
-		if err := ui.WriteJSON(os.Stdout, results, queriesPerDomain, len(domains)); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
+		return ui.WriteJSON(os.Stdout, results, queriesPerDomain, len(domains))
 	}
 
 	fmt.Printf(m.BenchStarting, len(servers), len(domains))
@@ -140,6 +137,7 @@ func runBenchmark(cmd *cobra.Command, args []string) {
 
 	fmt.Println(m.RecommendHeader)
 	ui.PrintRecommendations(results)
+	return nil
 }
 
 func main() {

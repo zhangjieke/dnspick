@@ -29,7 +29,7 @@ type jsonResult struct {
 	Rank         int     `json:"rank"`
 	Name         string  `json:"name"`
 	Address      string  `json:"address"`
-	Protocol     string  `json:"protocol"`
+	Protocol     dnsbench.Protocol `json:"protocol"`
 	IsSystem     bool    `json:"is_system"`
 	AvgLatencyMs float64 `json:"avg_latency_ms"`
 	SuccessRate  float64 `json:"success_rate"`
@@ -47,7 +47,7 @@ type jsonTop struct {
 	Rank     int    `json:"rank"`
 	Name     string `json:"name"`
 	Address  string `json:"address"`
-	Protocol string `json:"protocol"`
+	Protocol dnsbench.Protocol `json:"protocol"`
 }
 
 // jsonSystemVerdict is the conclusion about the system default DNS. Verdict is a

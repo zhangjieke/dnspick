@@ -6,6 +6,7 @@ package i18n
 import (
 	"os"
 	"strings"
+	"sync/atomic"
 )
 
 // Lang identifies a supported UI language.
@@ -166,18 +167,20 @@ var zh = &Messages{
 
 // active is the currently selected catalog. Defaults to English so that code
 // paths and tests that never call Set behave deterministically.
-var active = en
+var active atomic.Pointer[Messages]
+
+func init() { active.Store(en) }
 
 // L returns the active language's message catalog.
-func L() *Messages { return active }
+func L() *Messages { return active.Load() }
 
 // Set switches the active language.
 func Set(l Lang) {
 	if l == ZH {
-		active = zh
+		active.Store(zh)
 		return
 	}
-	active = en
+	active.Store(en)
 }
 
 // Detect resolves a language from an explicit value (e.g. the --lang flag),

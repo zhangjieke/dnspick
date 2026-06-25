@@ -3,19 +3,22 @@
 // contains no command-line or terminal presentation logic.
 package dnsbench
 
-import "github.com/palemoky/dnspick/internal/i18n"
+// Protocol identifies the DNS transport used by a server.
+type Protocol string
 
 // Supported protocols.
 const (
-	UDP = "udp"
-	DOT = "dot"
-	DOH = "doh"
+	UDP Protocol = "udp"
+	DOT Protocol = "dot"
+	DOH Protocol = "doh"
 )
 
 // Server describes a DNS server to be tested.
 type Server struct {
-	Name, Address, Protocol string
-	IsSystem                bool // whether this is the detected system default DNS
+	Name     string
+	Address  string
+	Protocol Protocol
+	IsSystem bool // whether this is the detected system default DNS
 }
 
 // Domain categories. These are stable internal keys; use CategoryLabel for
@@ -26,19 +29,7 @@ const (
 	CategoryCustom   = "custom"
 )
 
-// CategoryLabel returns the localized display label for a category key.
-func CategoryLabel(category string) string {
-	switch category {
-	case CategoryDomestic:
-		return i18n.L().CatDomestic
-	case CategoryForeign:
-		return i18n.L().CatForeign
-	case CategoryCustom:
-		return i18n.L().CatCustom
-	default:
-		return category
-	}
-}
+
 
 // Domain is a test domain with its category.
 type Domain struct{ Name, Category string }

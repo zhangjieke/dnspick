@@ -23,7 +23,17 @@ const (
 	owner = "palemoky"
 	repo  = "dnspick"
 	app   = "dnspick"
+
+	// maxDownloadSize caps the update archive read to prevent unbounded
+	// memory usage from abnormally large or malicious responses.
+	maxDownloadSize = 200 << 20 // 200 MB
 )
+
+// newHTTPClient builds an HTTP client with explicit timeouts instead of relying
+// on http.DefaultClient (which has no timeout at all).
+func newHTTPClient() *http.Client {
+	return &http.Client{Timeout: DefaultTimeout}
+}
 
 // release is the subset of GitHub API release fields we use.
 type release struct {
@@ -96,7 +106,7 @@ func latestRelease(ctx context.Context) (*release, error) {
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := newHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query the latest release: %w", err)
 	}
@@ -130,7 +140,7 @@ func downloadBinary(ctx context.Context, tag string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := newHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download the update package: %w", err)
 	}
@@ -138,7 +148,7 @@ func downloadBinary(ctx context.Context, tag string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to download the update package: %s returned %s", asset, resp.Status)
 	}
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDownloadSize))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read the update package: %w", err)
 	}

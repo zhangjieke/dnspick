@@ -14,6 +14,20 @@ import (
 	"github.com/palemoky/dnspick/internal/i18n"
 )
 
+// CategoryLabel returns the localized display label for a domain category key.
+func CategoryLabel(category string) string {
+	switch category {
+	case dnsbench.CategoryDomestic:
+		return i18n.L().CatDomestic
+	case dnsbench.CategoryForeign:
+		return i18n.L().CatForeign
+	case dnsbench.CategoryCustom:
+		return i18n.L().CatCustom
+	default:
+		return category
+	}
+}
+
 // PrintResultsTable prints a formatted result table using tablewriter.
 func PrintResultsTable(results []dnsbench.Result) {
 	table := tablewriter.NewWriter(os.Stdout)
@@ -65,7 +79,7 @@ type Recommendation struct {
 func topRecommendations(results []dnsbench.Result) []Recommendation {
 	var top []Recommendation
 	for i, r := range results {
-		if r.SuccessRate <= recommendThreshold {
+		if r.SuccessRate < recommendThreshold {
 			continue
 		}
 		top = append(top, Recommendation{Rank: i + 1, Result: r})

@@ -1,7 +1,8 @@
 package dnsbench
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +20,7 @@ type Options struct {
 // Result is the final benchmark result for a single DNS server.
 type Result struct {
 	Name, Address      string
-	Protocol           string // UDP, DOT or DOH
+	Protocol           Protocol // UDP, DOT or DOH
 	AvgTime            time.Duration
 	SuccessRate, Score float64
 	Successes, Total   int
@@ -39,7 +40,7 @@ type serverStat struct {
 	successes int
 	total     int
 	address   string
-	protocol  string
+	protocol  Protocol
 	isSystem  bool
 }
 
@@ -109,7 +110,9 @@ func benchmarkServer(server Server, opts Options, ch chan<- queryResult, progres
 	defer closeFn()
 
 	// Warm-up (result discarded).
-	_, _ = q(opts.Domains[0].Name)
+	if len(opts.Domains) > 0 {
+		_, _ = q(opts.Domains[0].Name)
+	}
 
 	for _, domain := range opts.Domains {
 		for range opts.Queries {
@@ -156,8 +159,8 @@ func calculateScores(serverStats map[string]*serverStat) []Result {
 		results = append(results, res)
 	}
 
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Score > results[j].Score
+	slices.SortFunc(results, func(a, b Result) int {
+		return cmp.Compare(b.Score, a.Score)
 	})
 
 	return results

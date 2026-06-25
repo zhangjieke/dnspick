@@ -36,8 +36,11 @@ func TestSystemDNSFromResolvConfMissing(t *testing.T) {
 }
 
 func TestBuildSystemServers(t *testing.T) {
+	const nameSingle = "System DNS"
+	const nameFmt = "System DNS %d"
+
 	// Dedupe + filter invalid + numbered naming.
-	servers := buildSystemServers([]string{"1.1.1.1", "1.1.1.1", "", "not-an-ip", "8.8.8.8"})
+	servers := buildSystemServers([]string{"1.1.1.1", "1.1.1.1", "", "not-an-ip", "8.8.8.8"}, nameSingle, nameFmt)
 	if len(servers) != 2 {
 		t.Fatalf("expected 2 servers, got %d: %+v", len(servers), servers)
 	}
@@ -46,18 +49,18 @@ func TestBuildSystemServers(t *testing.T) {
 			t.Fatalf("unexpected server fields: %+v", s)
 		}
 	}
-	if servers[0].Name != "Current default DNS 1" || servers[1].Name != "Current default DNS 2" {
+	if servers[0].Name != "System DNS 1" || servers[1].Name != "System DNS 2" {
 		t.Fatalf("unexpected names: %q, %q", servers[0].Name, servers[1].Name)
 	}
 
 	// A single server is not numbered.
-	single := buildSystemServers([]string{"9.9.9.9"})
-	if len(single) != 1 || single[0].Name != "Current default DNS" {
+	single := buildSystemServers([]string{"9.9.9.9"}, nameSingle, nameFmt)
+	if len(single) != 1 || single[0].Name != nameSingle {
 		t.Fatalf("unexpected single server: %+v", single)
 	}
 
 	// All invalid -> nil.
-	if got := buildSystemServers([]string{"", "x"}); got != nil {
+	if got := buildSystemServers([]string{"", "x"}, nameSingle, nameFmt); got != nil {
 		t.Fatalf("expected nil, got %v", got)
 	}
 }

@@ -8,26 +8,26 @@ import (
 	"strings"
 
 	"github.com/miekg/dns"
-
-	"github.com/palemoky/dnspick/internal/i18n"
 )
 
 // DetectSystemDNS probes the system's configured default DNS servers (handed
 // out by the ISP or router) and returns Servers ready to be benchmarked.
+// nameSingle is the display name for a single system DNS; nameFmt is a
+// fmt.Sprintf pattern (with one %d) for numbering multiple entries.
 // Returns nil when detection is not possible (the feature degrades gracefully).
-func DetectSystemDNS() []Server {
+func DetectSystemDNS(nameSingle, nameFmt string) []Server {
 	var ips []string
 	if runtime.GOOS == "windows" {
 		ips = windowsDNS()
 	} else {
 		ips = systemDNSFromResolvConf("/etc/resolv.conf")
 	}
-	return buildSystemServers(ips)
+	return buildSystemServers(ips, nameSingle, nameFmt)
 }
 
 // buildSystemServers deduplicates the IP list and converts it into Servers
 // flagged with IsSystem.
-func buildSystemServers(ips []string) []Server {
+func buildSystemServers(ips []string, nameSingle, nameFmt string) []Server {
 	seen := make(map[string]struct{})
 	var servers []Server
 	for _, ip := range ips {
@@ -44,9 +44,9 @@ func buildSystemServers(ips []string) []Server {
 	// Naming: a single server is unnumbered, multiple servers are numbered.
 	for i := range servers {
 		if len(servers) == 1 {
-			servers[i].Name = i18n.L().SystemDNSName
+			servers[i].Name = nameSingle
 		} else {
-			servers[i].Name = fmt.Sprintf(i18n.L().SystemDNSNameN, i+1)
+			servers[i].Name = fmt.Sprintf(nameFmt, i+1)
 		}
 	}
 	return servers

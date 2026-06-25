@@ -39,8 +39,9 @@ type StatusTracker struct {
 	grand      int        // total number of queries
 	completed  int
 	isTTY      bool
-	lines      int // number of lines rendered last time (for in-place TTY refresh)
-	lastBucket int // non-TTY: last printed 10% bucket
+	lines      int  // number of lines rendered last time (for in-place TTY refresh)
+	lastBucket int  // non-TTY: last printed 10% bucket
+	started    bool // whether Start has printed the initial snapshot (non-TTY)
 	out        io.Writer
 	stop       chan struct{}
 	doneCh     chan struct{}
@@ -108,6 +109,7 @@ func (t *StatusTracker) Progress(domain string) {
 func (t *StatusTracker) Start() {
 	if !t.isTTY {
 		t.printSnapshot()
+		t.started = true
 		return
 	}
 	t.draw()
@@ -131,7 +133,9 @@ func (t *StatusTracker) Start() {
 // Stop ends the display and performs a final render.
 func (t *StatusTracker) Stop() {
 	if !t.isTTY {
-		t.printSnapshot()
+		if !t.started {
+			t.printSnapshot()
+		}
 		return
 	}
 	close(t.stop)
@@ -175,7 +179,7 @@ func (t *StatusTracker) renderLocked() []string {
 
 	header := make([]string, 0, len(t.groups)*2)
 	for _, g := range t.groups {
-		header = append(header, dnsbench.CategoryLabel(g.category), i18n.L().StatusCol)
+		header = append(header, CategoryLabel(g.category), i18n.L().StatusCol)
 	}
 	table.Header(header)
 
