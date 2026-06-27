@@ -55,6 +55,12 @@ var updateCmd = &cobra.Command{
 func setup() {
 	m := i18n.L()
 
+	// Cobra's Windows "mousetrap" otherwise intercepts a double-click launch,
+	// prints "This is a command line tool..." and exits before the command
+	// runs. dnspick is meant to be usable by double-clicking, and the console
+	// is kept open afterwards by console.PauseOnExit, so disable the mousetrap.
+	cobra.MousetrapHelpText = ""
+
 	rootCmd.Short = m.CmdRootShort
 	rootCmd.Long = m.CmdRootLong
 	versionCmd.Short = m.CmdVersionShort
