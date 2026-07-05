@@ -38,6 +38,31 @@ const (
 // Domain is a test domain with its category.
 type Domain struct{ Name, Category string }
 
+// DefaultDomains is the built-in list of test domains (a balanced selection per category, deduplicated across same-company domains).
+var DefaultDomains = []Domain{
+	{"baidu.com", CategoryDomestic},
+	{"qq.com", CategoryDomestic},
+	{"taobao.com", CategoryDomestic},
+	{"jd.com", CategoryDomestic},
+	{"bilibili.com", CategoryDomestic},
+	{"douyin.com", CategoryDomestic},
+	{"weibo.com", CategoryDomestic},
+	{"163.com", CategoryDomestic},
+	{"zhihu.com", CategoryDomestic},
+	{"aliyun.com", CategoryDomestic},
+
+	{"google.com", CategoryForeign},
+	{"youtube.com", CategoryForeign},
+	{"github.com", CategoryForeign},
+	{"facebook.com", CategoryForeign},
+	{"x.com", CategoryForeign},
+	{"apple.com", CategoryForeign},
+	{"chatgpt.com", CategoryForeign},
+	{"bing.com", CategoryForeign},
+	{"tiktok.com", CategoryForeign},
+	{"cloudflare.com", CategoryForeign},
+}
+
 // DefaultServers is the built-in list of default DNS servers.
 var DefaultServers = []Server{
 	{Name: "AliDNS 1 (UDP)", Address: "223.5.5.5", Protocol: UDP},
@@ -146,29 +171,4 @@ func hostOf(rawURL string) string {
 func customName(host string, p Protocol) string {
 	label := map[Protocol]string{UDP: "UDP", DOT: "DoT", DOH: "DoH", DOH3: "DoH3"}[p]
 	return host + " (" + label + ")"
-}
-
-// DefaultDomains is the built-in list of test domains (a balanced selection per category, deduplicated across same-company domains).
-var DefaultDomains = []Domain{
-	{"baidu.com", CategoryDomestic},
-	{"qq.com", CategoryDomestic},
-	{"taobao.com", CategoryDomestic},
-	{"jd.com", CategoryDomestic},
-	{"bilibili.com", CategoryDomestic},
-	{"douyin.com", CategoryDomestic},
-	{"weibo.com", CategoryDomestic},
-	{"163.com", CategoryDomestic},
-	{"zhihu.com", CategoryDomestic},
-	{"aliyun.com", CategoryDomestic},
-
-	{"google.com", CategoryForeign},
-	{"youtube.com", CategoryForeign},
-	{"github.com", CategoryForeign},
-	{"facebook.com", CategoryForeign},
-	{"x.com", CategoryForeign},
-	{"apple.com", CategoryForeign},
-	{"chatgpt.com", CategoryForeign},
-	{"bing.com", CategoryForeign},
-	{"tiktok.com", CategoryForeign},
-	{"cloudflare.com", CategoryForeign},
 }
