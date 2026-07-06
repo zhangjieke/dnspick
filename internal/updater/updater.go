@@ -29,6 +29,9 @@ const (
 	maxDownloadSize = 200 << 20 // 200 MB
 )
 
+// DefaultTimeout is the suggested timeout for a check/update operation.
+const DefaultTimeout = 60 * time.Second
+
 // newHTTPClient builds an HTTP client with explicit timeouts instead of relying
 // on http.DefaultClient (which has no timeout at all).
 func newHTTPClient() *http.Client {
@@ -47,20 +50,6 @@ type CheckResult struct {
 	Latest    string // latest released version, e.g. v2.1.0
 	HasUpdate bool   // whether an update is available
 	URL       string // URL of the latest release page
-}
-
-// Check queries the latest release on GitHub and compares it to current.
-func Check(ctx context.Context, current string) (*CheckResult, error) {
-	rel, err := latestRelease(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &CheckResult{
-		Current:   current,
-		Latest:    rel.TagName,
-		HasUpdate: isNewer(current, rel.TagName),
-		URL:       rel.HTMLURL,
-	}, nil
 }
 
 // Update checks for and, when a newer version exists, replaces the current
@@ -89,13 +78,18 @@ func Update(ctx context.Context, current string) (latest string, updated bool, e
 	return res.Latest, true, nil
 }
 
-// isNewer reports whether latest is newer than current. When current is not a
-// valid semver (e.g. "dev" or a dirty build), an update is always assumed.
-func isNewer(current, latest string) bool {
-	if !semver.IsValid(current) {
-		return true
+// Check queries the latest release on GitHub and compares it to current.
+func Check(ctx context.Context, current string) (*CheckResult, error) {
+	rel, err := latestRelease(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return semver.Compare(current, latest) < 0
+	return &CheckResult{
+		Current:   current,
+		Latest:    rel.TagName,
+		HasUpdate: isNewer(current, rel.TagName),
+		URL:       rel.HTMLURL,
+	}, nil
 }
 
 func latestRelease(ctx context.Context) (*release, error) {
@@ -123,6 +117,15 @@ func latestRelease(ctx context.Context) (*release, error) {
 		return nil, fmt.Errorf("no release found")
 	}
 	return &rel, nil
+}
+
+// isNewer reports whether latest is newer than current. When current is not a
+// valid semver (e.g. "dev" or a dirty build), an update is always assumed.
+func isNewer(current, latest string) bool {
+	if !semver.IsValid(current) {
+		return true
+	}
+	return semver.Compare(current, latest) < 0
 }
 
 // downloadBinary downloads the archive for the given version matching the
@@ -206,6 +209,3 @@ func binaryFromZip(data []byte) ([]byte, error) {
 	}
 	return nil, fmt.Errorf("no executable found in the update package")
 }
-
-// DefaultTimeout is the suggested timeout for a check/update operation.
-const DefaultTimeout = 60 * time.Second
