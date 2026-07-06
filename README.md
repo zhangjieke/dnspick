@@ -2,8 +2,8 @@
 
 # DNS Pick
 
-[![Go Cross-Platform Build](https://github.com/palemoky/dnspick/actions/workflows/ci.yml/badge.svg)](https://github.com/palemoky/dnspick/actions)
-[![Go Report Card](https://goreportcard.com/badge/github.com/palemoky/dnspick)](https://goreportcard.com/report/github.com/palemoky/dnspick)
+[![Go Cross-Platform Build](https://github.com/zhangjieke/dnspick/actions/workflows/ci.yml/badge.svg)](https://github.com/zhangjieke/dnspick/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/zhangjieke/dnspick)](https://goreportcard.com/report/github.com/zhangjieke/dnspick)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 Pick the DNS that fits you
@@ -13,6 +13,8 @@ Pick the DNS that fits you
 </div>
 
 `dnspick` is a cross-platform command-line tool. It concurrently benchmarks a set of popular and custom DNS servers (over UDP, DoT, DoH and DoH3) by repeatedly querying a list of common domains, then scores them intelligently from **average latency** and **success rate**. It also folds in the default DNS you are currently using for comparison and gives a recommendation at the end.
+
+This project is a fork of `palemoky/dnspick`.
 
 ---
 
@@ -85,20 +87,20 @@ The script auto-detects your OS and CPU architecture, downloads the matching bui
 **Linux / macOS**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/palemoky/dnspick/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/zhangjieke/dnspick/main/install.sh | sh
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-irm https://raw.githubusercontent.com/palemoky/dnspick/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/zhangjieke/dnspick/main/install.ps1 | iex
 ```
 
 > 💡 macOS users don't need to deal with Gatekeeper manually — the script clears the quarantine flag automatically.
 
 ### Manual install
 
-You can also download a prebuilt binary for your OS directly from the [GitHub Releases](https://github.com/palemoky/dnspick/releases) page.
+You can also download a prebuilt binary for your OS directly from the [GitHub Releases](https://github.com/zhangjieke/dnspick/releases) page.
 
 1.  Go to the latest Release page.
 2.  Download the archive matching your OS and CPU architecture (e.g. `dnspick-windows-amd64.zip`).

@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	owner = "palemoky"
+	owner = "zhangjieke"
 	repo  = "dnspick"
 	app   = "dnspick"
 

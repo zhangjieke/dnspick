@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/palemoky/dnspick/internal/dnsbench"
+	"github.com/zhangjieke/dnspick/internal/dnsbench"
 )
 
 func TestWriteJSON(t *testing.T) {

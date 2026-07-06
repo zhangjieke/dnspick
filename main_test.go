@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/palemoky/dnspick/internal/dnsbench"
 	"github.com/spf13/cobra"
+	"github.com/zhangjieke/dnspick/internal/dnsbench"
 )
 
 func TestLangFromArgs(t *testing.T) {

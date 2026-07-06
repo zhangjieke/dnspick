@@ -13,8 +13,8 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"golang.org/x/term"
 
-	"github.com/palemoky/dnspick/internal/dnsbench"
-	"github.com/palemoky/dnspick/internal/i18n"
+	"github.com/zhangjieke/dnspick/internal/dnsbench"
+	"github.com/zhangjieke/dnspick/internal/i18n"
 )
 
 // catGroup is a group of domains aggregated by category (indices point into

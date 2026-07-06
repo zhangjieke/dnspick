@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/palemoky/dnspick/internal/i18n"
+	"github.com/zhangjieke/dnspick/internal/i18n"
 )
 
 var (

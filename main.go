@@ -12,13 +12,13 @@ import (
 	"golang.org/x/mod/semver"
 	"golang.org/x/term"
 
-	"github.com/palemoky/dnspick/internal/buildinfo"
-	"github.com/palemoky/dnspick/internal/config"
-	"github.com/palemoky/dnspick/internal/console"
-	"github.com/palemoky/dnspick/internal/dnsbench"
-	"github.com/palemoky/dnspick/internal/i18n"
-	"github.com/palemoky/dnspick/internal/ui"
-	"github.com/palemoky/dnspick/internal/updater"
+	"github.com/zhangjieke/dnspick/internal/buildinfo"
+	"github.com/zhangjieke/dnspick/internal/config"
+	"github.com/zhangjieke/dnspick/internal/console"
+	"github.com/zhangjieke/dnspick/internal/dnsbench"
+	"github.com/zhangjieke/dnspick/internal/i18n"
+	"github.com/zhangjieke/dnspick/internal/ui"
+	"github.com/zhangjieke/dnspick/internal/updater"
 )
 
 var (

@@ -7,7 +7,7 @@
     installs it under the user directory and adds it to PATH.
 
 .EXAMPLE
-    irm https://raw.githubusercontent.com/palemoky/dnspick/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/zhangjieke/dnspick/main/install.ps1 | iex
 
 .NOTES
     Optional environment variables:
@@ -17,7 +17,7 @@
 
 $ErrorActionPreference = 'Stop'
 
-$Repo = 'palemoky/dnspick'
+$Repo = 'zhangjieke/dnspick'
 $App  = 'dnspick'
 $Version = if ($env:DNSPICK_VERSION) { $env:DNSPICK_VERSION } else { 'latest' }
 

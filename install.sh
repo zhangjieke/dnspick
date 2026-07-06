@@ -2,7 +2,7 @@
 # dnspick installer
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/palemoky/dnspick/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/zhangjieke/dnspick/main/install.sh | sh
 #
 # Optional environment variables:
 #   DNSPICK_VERSION   version to install (default: latest), e.g. v2.0.0
@@ -10,7 +10,7 @@
 
 set -eu
 
-REPO="palemoky/dnspick"
+REPO="zhangjieke/dnspick"
 APP="dnspick"
 VERSION="${DNSPICK_VERSION:-latest}"
 
