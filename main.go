@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/palemoky/dnspick/internal/buildinfo"
+	"github.com/palemoky/dnspick/internal/config"
 	"github.com/palemoky/dnspick/internal/console"
 	"github.com/palemoky/dnspick/internal/dnsbench"
 	"github.com/palemoky/dnspick/internal/i18n"
@@ -28,6 +30,14 @@ var (
 	noSystemDNS      bool
 	langFlag         string
 	jsonOutput       bool
+)
+
+var (
+	ensureDomainList  = config.EnsureDomainList
+	ensureServerList  = config.EnsureServerList
+	loadDomainEntries = config.LoadDomainEntries
+	loadServerEntries = config.LoadServerEntries
+	detectSystemDNS   = dnsbench.DetectSystemDNS
 )
 
 var rootCmd = &cobra.Command{
@@ -102,29 +112,20 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 func runBenchmark(cmd *cobra.Command, args []string) error {
 	m := i18n.L()
 
-	// Domains: use the custom list when -d is given (classified as Custom),
-	// otherwise fall back to the built-in categorized list.
-	domains := dnsbench.DefaultDomains
-	if cmd.Flags().Changed("domains") {
-		domains = dnsbench.ParseDomains(domainsStr)
+	domains, err := benchmarkDomains(cmd)
+	if err != nil {
+		return err
 	}
 	if len(domains) == 0 {
 		return fmt.Errorf("%s", m.ErrNoDomains)
 	}
 
-	// Servers: the custom list when -s is given, otherwise the built-in list;
-	// in both cases the system default DNS is appended unless disabled.
-	servers := dnsbench.DefaultServers
-	if cmd.Flags().Changed("servers") {
-		servers = dnsbench.ParseServers(serversStr)
-		if len(servers) == 0 {
-			return fmt.Errorf("%s", m.ErrNoServers)
-		}
+	servers, err := benchmarkServers(cmd, m.SystemDNSName, m.SystemDNSNameN)
+	if err != nil {
+		return err
 	}
-	if !noSystemDNS {
-		if sys := dnsbench.DetectSystemDNS(m.SystemDNSName, m.SystemDNSNameN); len(sys) > 0 {
-			servers = append(append([]dnsbench.Server{}, servers...), sys...)
-		}
+	if len(servers) == 0 {
+		return fmt.Errorf("%s", m.ErrNoServers)
 	}
 
 	opts := dnsbench.Options{
@@ -162,6 +163,80 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 
 	autoUpdate(updateCh)
 	return nil
+}
+
+func benchmarkDomains(cmd *cobra.Command) ([]dnsbench.Domain, error) {
+	if cmd.Flags().Changed("domains") {
+		return dnsbench.ParseDomains(domainsStr), nil
+	}
+
+	if err := ensureDomainList(defaultDomainEntries()); err != nil {
+		return nil, fmt.Errorf("ensure domain.list: %w", err)
+	}
+	entries, exists, err := loadDomainEntries()
+	if err != nil {
+		return nil, fmt.Errorf("load domain.list: %w", err)
+	}
+	if exists {
+		return dnsbench.ParseDomainEntries(slices.Values(entries)), nil
+	}
+	return slices.Clone(dnsbench.DefaultDomains), nil
+}
+
+func benchmarkServers(cmd *cobra.Command, systemName, systemNameFmt string) ([]dnsbench.Server, error) {
+	var servers []dnsbench.Server
+	if cmd.Flags().Changed("servers") {
+		servers = dnsbench.ParseServers(serversStr)
+		if len(servers) == 0 {
+			return servers, nil
+		}
+	} else {
+		if err := ensureServerList(defaultServerEntries()); err != nil {
+			return nil, fmt.Errorf("ensure server.list: %w", err)
+		}
+		entries, exists, err := loadServerEntries()
+		if err != nil {
+			return nil, fmt.Errorf("load server.list: %w", err)
+		}
+		if exists {
+			servers = dnsbench.ParseServerEntries(slices.Values(entries))
+		} else {
+			servers = slices.Clone(dnsbench.DefaultServers)
+		}
+	}
+
+	if !noSystemDNS {
+		sys := detectSystemDNS(systemName, systemNameFmt)
+		servers = dnsbench.MergeServers(servers, sys)
+	}
+	return servers, nil
+}
+
+func defaultDomainEntries() []string {
+	entries := make([]string, 0, len(dnsbench.DefaultDomains))
+	for _, d := range dnsbench.DefaultDomains {
+		entries = append(entries, d.Name)
+	}
+	return entries
+}
+
+func defaultServerEntries() []string {
+	entries := make([]string, 0, len(dnsbench.DefaultServers))
+	for _, s := range dnsbench.DefaultServers {
+		entries = append(entries, serverConfigEntry(s))
+	}
+	return entries
+}
+
+func serverConfigEntry(s dnsbench.Server) string {
+	switch s.Protocol {
+	case dnsbench.DOT:
+		return "tls://" + s.Address
+	case dnsbench.DOH3:
+		return "h3://" + strings.TrimPrefix(s.Address, "https://")
+	default:
+		return s.Address
+	}
 }
 
 // updateCheckTimeout bounds the background "is there a newer release?" check so a

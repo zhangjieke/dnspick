@@ -162,14 +162,47 @@ dnspick --json | jq '.recommendation.top'
 
 | Flag              | Short | Default       | Description                                                                 |
 | ----------------- | ----- | ------------- | --------------------------------------------------------------------------- |
-| `--domains`       | `-d`  | built-in list | Comma-separated custom domains to test (deduplicated); falls back to the built-in domestic/foreign list |
-| `--servers`       | `-s`  | built-in list | Comma-separated custom DNS servers to test; protocol is inferred from the scheme (`1.1.1.1` → UDP, `tls://host` → DoT, `https://host/dns-query` → DoH, `h3://host/dns-query` → DoH3) |
+| `--domains`       | `-d`  | `~/.config/dnspick/domain.list` if present, otherwise built-in list | Comma-separated custom domains to test (deduplicated); when explicitly set, only the CLI list is used |
+| `--servers`       | `-s`  | `~/.config/dnspick/server.list` if present, otherwise built-in list | Comma-separated custom DNS servers to test; protocol is inferred from the scheme (`1.1.1.1` → UDP, `tls://host` → DoT, `https://host/dns-query` → DoH, `h3://host/dns-query` → DoH3); when explicitly set, only the CLI list is used |
 | `--queries`       | `-q`  | `3`           | Number of queries per domain                                                |
 | `--timeout`       | `-t`  | `2s`          | Timeout per query                                                           |
 | `--concurrency`   | `-c`  | `16`          | Maximum number of servers tested concurrently                               |
 | `--no-system-dns` |       | `false`       | Do not detect or test the current system default DNS                        |
 | `--lang`          |       | `$LANG`       | UI language: `en` or `zh` (defaults to the system `LANG` environment variable) |
 | `--json`          |       | `false`       | Output machine-readable JSON to stdout (suppresses the progress UI)         |
+
+## Config files
+
+On first run, dnspick automatically creates `~/.config/dnspick/domain.list` and `~/.config/dnspick/server.list` with the current built-in defaults. After that, those files become the default source of truth. Existing files are never overwritten automatically.
+
+`domain.list`:
+
+```text
+# one domain per line
+example.com
+internal.example
+```
+
+`server.list`:
+
+```text
+# one server per line
+1.1.1.1
+tls://dns.google
+https://dns.google/dns-query
+h3://cloudflare-dns.com/dns-query
+```
+
+Rules:
+
+- Empty lines and lines starting with `#` are ignored.
+- If a file exists, dnspick uses only that file as the default list for that category.
+- If a file is missing, dnspick falls back to the built-in defaults for that category and creates the file on first run.
+- Existing files are never overwritten by later runs or upgrades.
+- Deduplication preserves the first occurrence inside the active list, and also prevents testing a system DNS twice.
+- If you explicitly pass `--domains`, `domain.list` is ignored for that run.
+- If you explicitly pass `--servers`, `server.list` is ignored for that run.
+- System DNS is still appended afterwards unless `--no-system-dns` is set.
 
 ---
 

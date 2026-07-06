@@ -4,6 +4,7 @@
 package dnsbench
 
 import (
+	"iter"
 	"net/url"
 	"strings"
 )
@@ -89,26 +90,16 @@ var DefaultServers = []Server{
 //
 // Entries that cannot be parsed are skipped.
 func ParseServers(raw string) []Server {
-	seen := make(map[string]struct{})
-	var servers []Server
-	for entry := range strings.SplitSeq(raw, ",") {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-		if _, ok := seen[entry]; ok {
-			continue
-		}
-		seen[entry] = struct{}{}
-		if s, ok := parseServer(entry); ok {
-			servers = append(servers, s)
-		}
-	}
-	return servers
+	return ParseServerEntries(strings.SplitSeq(raw, ","))
 }
 
 // parseServer turns a single user-supplied entry into a Server.
 func parseServer(entry string) (Server, bool) {
+	entry = strings.TrimSpace(entry)
+	if entry == "" {
+		return Server{}, false
+	}
+
 	switch {
 	case strings.HasPrefix(entry, "h3://"):
 		// HTTP/3 transport requires an https URL; rewrite the scheme but keep
@@ -146,6 +137,68 @@ func hostOf(rawURL string) string {
 func customName(host string, p Protocol) string {
 	label := map[Protocol]string{UDP: "UDP", DOT: "DoT", DOH: "DoH", DOH3: "DoH3"}[p]
 	return host + " (" + label + ")"
+}
+
+// ParseServerEntries parses server entries from any string sequence, preserving
+// first occurrence order and skipping duplicates or invalid items.
+func ParseServerEntries(entries iter.Seq[string]) []Server {
+	return appendUniqueServers(nil, parseServerEntries(entries)...)
+}
+
+func parseServerEntries(entries iter.Seq[string]) []Server {
+	var servers []Server
+	for entry := range entries {
+		if s, ok := parseServer(entry); ok {
+			servers = append(servers, s)
+		}
+	}
+	return servers
+}
+
+// MergeServers appends unique servers from extras after base, preserving the
+// first occurrence and its display name/order.
+func MergeServers(base []Server, extras ...[]Server) []Server {
+	out := append([]Server{}, base...)
+	for _, group := range extras {
+		out = appendUniqueServers(out, group...)
+	}
+	return out
+}
+
+func appendUniqueServers(dst []Server, servers ...Server) []Server {
+	seen := make(map[string]struct{}, len(dst)+len(servers))
+	for _, s := range dst {
+		seen[serverKey(s)] = struct{}{}
+	}
+	for _, s := range servers {
+		key := serverKey(s)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		dst = append(dst, s)
+	}
+	return dst
+}
+
+func serverKey(s Server) string {
+	return string(s.Protocol) + "|" + normalizeServerAddress(s)
+}
+
+func normalizeServerAddress(s Server) string {
+	addr := strings.TrimSpace(s.Address)
+	switch s.Protocol {
+	case DOH, DOH3:
+		u, err := url.Parse(addr)
+		if err != nil {
+			return strings.ToLower(addr)
+		}
+		u.Scheme = strings.ToLower(u.Scheme)
+		u.Host = strings.ToLower(u.Host)
+		return u.String()
+	default:
+		return strings.ToLower(addr)
+	}
 }
 
 // DefaultDomains is the built-in list of test domains (a balanced selection per category, deduplicated across same-company domains).

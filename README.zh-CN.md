@@ -162,14 +162,47 @@ dnspick --json | jq '.recommendation.top'
 
 | 参数              | 简写 | 默认值   | 描述                                                         |
 | ----------------- | ---- | -------- | ------------------------------------------------------------ |
-| `--domains`       | `-d` | 内置列表 | 自定义测试域名列表，以逗号分隔（自动去重）；不指定则使用内置的国内/国外域名 |
-| `--servers`       | `-s` | 内置列表 | 自定义 DNS 服务器列表，以逗号分隔；协议按 scheme 自动推断（`1.1.1.1` → UDP，`tls://host` → DoT，`https://host/dns-query` → DoH，`h3://host/dns-query` → DoH3） |
+| `--domains`       | `-d` | 优先使用 `~/.config/dnspick/domain.list`，不存在时回退内置列表 | 自定义测试域名列表，以逗号分隔（自动去重）；显式传入时本次仅使用命令行列表 |
+| `--servers`       | `-s` | 优先使用 `~/.config/dnspick/server.list`，不存在时回退内置列表 | 自定义 DNS 服务器列表，以逗号分隔；协议按 scheme 自动推断（`1.1.1.1` → UDP，`tls://host` → DoT，`https://host/dns-query` → DoH，`h3://host/dns-query` → DoH3）；显式传入时本次仅使用命令行列表 |
 | `--queries`       | `-q` | `3`      | 每个域名的查询次数                                           |
 | `--timeout`       | `-t` | `2s`     | 单次查询超时时间                                             |
 | `--concurrency`   | `-c` | `16`     | 同时测试的服务器数量上限                                     |
 | `--no-system-dns` |      | `false`  | 不检测、不测试当前系统默认 DNS                               |
 | `--lang`          |      | `$LANG`  | 界面语言：`en` 或 `zh`（默认跟随系统 `LANG` 环境变量）       |
 | `--json`          |      | `false`  | 以机器可读的 JSON 输出到 stdout（不显示进度界面）            |
+
+## 配置文件
+
+首次运行时，dnspick 会自动创建 `~/.config/dnspick/domain.list` 和 `~/.config/dnspick/server.list`，并写入当前内置默认项。之后这两个文件就会成为默认配置来源，已有文件不会被后续运行或升级自动覆盖。
+
+`domain.list`：
+
+```text
+# 每行一个域名
+example.com
+internal.example
+```
+
+`server.list`：
+
+```text
+# 每行一个 DNS 服务器
+1.1.1.1
+tls://dns.google
+https://dns.google/dns-query
+h3://cloudflare-dns.com/dns-query
+```
+
+规则：
+
+- 空行和 `#` 开头的注释行会被忽略。
+- 对某一类列表来说，只要对应文件存在，dnspick 默认就只使用该文件内容。
+- 若对应文件不存在，则该类别回退到内置默认项，并在首次运行时自动创建文件。
+- 已有文件不会被后续运行或升级自动覆盖。
+- 去重会保留当前有效列表里第一次出现的条目，同时避免系统 DNS 被重复测试。
+- 如果显式传入 `--domains`，本次运行会忽略 `domain.list`。
+- 如果显式传入 `--servers`，本次运行会忽略 `server.list`。
+- 除非传入 `--no-system-dns`，系统默认 DNS 仍会在最后继续追加。
 
 ---
 

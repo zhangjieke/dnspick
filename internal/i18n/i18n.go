@@ -86,8 +86,8 @@ var en = &Messages{
 	CmdVersionShort: "Print version information",
 	CmdUpdateShort:  "Check for and update to the latest version",
 
-	FlagDomains:     "Comma-separated custom domains to test (defaults to the built-in domestic/foreign list)",
-	FlagServers:     "Comma-separated custom DNS servers to test, e.g. \"1.1.1.1, tls://dns.google, https://dns.google/dns-query, h3://cloudflare-dns.com/dns-query\" (defaults to the built-in list)",
+	FlagDomains:     "Comma-separated custom domains to test (defaults to ~/.config/dnspick/domain.list when present; otherwise the built-in list; explicit use overrides both)",
+	FlagServers:     "Comma-separated custom DNS servers to test, e.g. \"1.1.1.1, tls://dns.google, https://dns.google/dns-query, h3://cloudflare-dns.com/dns-query\" (defaults to ~/.config/dnspick/server.list when present; otherwise the built-in list; explicit use overrides both)",
 	FlagQueries:     "Number of queries per domain",
 	FlagTimeout:     "Timeout per query",
 	FlagConcurrency: "Maximum number of servers tested concurrently",
@@ -138,8 +138,8 @@ var zh = &Messages{
 	CmdVersionShort: "显示版本信息",
 	CmdUpdateShort:  "检查并更新到最新版本",
 
-	FlagDomains:     "自定义测试域名列表，以逗号分隔（默认使用内置国内/国外域名）",
-	FlagServers:     "自定义 DNS 服务器列表，以逗号分隔，例如 \"1.1.1.1, tls://dns.google, https://dns.google/dns-query, h3://cloudflare-dns.com/dns-query\"（默认使用内置列表）",
+	FlagDomains:     "自定义测试域名列表，以逗号分隔（优先使用 ~/.config/dnspick/domain.list，不存在时回退内置列表；显式传入时覆盖二者）",
+	FlagServers:     "自定义 DNS 服务器列表，以逗号分隔，例如 \"1.1.1.1, tls://dns.google, https://dns.google/dns-query, h3://cloudflare-dns.com/dns-query\"（优先使用 ~/.config/dnspick/server.list，不存在时回退内置列表；显式传入时覆盖二者）",
 	FlagQueries:     "每个域名的查询次数",
 	FlagTimeout:     "单次查询超时时间",
 	FlagConcurrency: "同时测试的服务器数量上限",

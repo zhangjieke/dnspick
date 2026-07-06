@@ -3,6 +3,7 @@ package dnsbench
 import (
 	"cmp"
 	"errors"
+	"iter"
 	"slices"
 	"strings"
 	"sync"
@@ -58,20 +59,53 @@ type serverStat struct {
 // ParseDomains splits, trims and deduplicates a custom domain list, preserving
 // the original order. Custom domains are all assigned the CategoryCustom category.
 func ParseDomains(raw string) []Domain {
-	seen := make(map[string]struct{})
+	return ParseDomainEntries(strings.SplitSeq(raw, ","))
+}
+
+// ParseDomainEntries parses domain entries from any string sequence,
+// preserving first occurrence order and assigning CategoryCustom.
+func ParseDomainEntries(entries iter.Seq[string]) []Domain {
 	var domains []Domain
-	for d := range strings.SplitSeq(raw, ",") {
-		d = strings.TrimSpace(d)
-		if d == "" {
+	for entry := range entries {
+		name := strings.TrimSpace(entry)
+		if name == "" {
 			continue
 		}
-		if _, ok := seen[d]; ok {
-			continue
-		}
-		seen[d] = struct{}{}
-		domains = append(domains, Domain{Name: d, Category: CategoryCustom})
+		domains = append(domains, Domain{Name: name, Category: CategoryCustom})
 	}
-	return domains
+	return MergeDomains(nil, domains)
+}
+
+// MergeDomains appends unique domains from extras after base, preserving the
+// first occurrence and its category/order.
+func MergeDomains(base []Domain, extras ...[]Domain) []Domain {
+	out := append([]Domain{}, base...)
+	seen := make(map[string]struct{}, len(out))
+	for _, d := range out {
+		seen[domainKey(d.Name)] = struct{}{}
+	}
+	for _, group := range extras {
+		for _, d := range group {
+			key := domainKey(d.Name)
+			if key == "" {
+				continue
+			}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+func domainKey(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	return strings.ToLower(name)
 }
 
 // Run benchmarks all servers concurrently and returns results sorted by score

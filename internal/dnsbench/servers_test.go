@@ -26,3 +26,38 @@ func TestParseServersEmpty(t *testing.T) {
 		t.Fatalf("expected empty, got %v", got)
 	}
 }
+
+func TestMergeServersDedupPreservesFirst(t *testing.T) {
+	base := []Server{
+		{Name: "Base UDP", Address: "1.1.1.1", Protocol: UDP},
+		{Name: "Base DoH", Address: "https://dns.google/dns-query", Protocol: DOH},
+	}
+	extras := []Server{
+		{Name: "Custom Duplicate", Address: "1.1.1.1", Protocol: UDP},
+		{Name: "Custom DoT", Address: "dns.google", Protocol: DOT},
+		{Name: "Custom DoH Duplicate", Address: "https://dns.google/dns-query", Protocol: DOH},
+		{Name: "Custom New", Address: "9.9.9.9", Protocol: UDP},
+	}
+	sys := []Server{
+		{Name: "System Duplicate", Address: "9.9.9.9", Protocol: UDP, IsSystem: true},
+		{Name: "System New", Address: "8.8.8.8", Protocol: UDP, IsSystem: true},
+	}
+
+	got := MergeServers(base, extras, sys)
+	want := []Server{
+		{Name: "Base UDP", Address: "1.1.1.1", Protocol: UDP},
+		{Name: "Base DoH", Address: "https://dns.google/dns-query", Protocol: DOH},
+		{Name: "Custom DoT", Address: "dns.google", Protocol: DOT},
+		{Name: "Custom New", Address: "9.9.9.9", Protocol: UDP},
+		{Name: "System New", Address: "8.8.8.8", Protocol: UDP, IsSystem: true},
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("got %d servers %v, want %d", len(got), got, len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("server %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}

@@ -28,6 +28,34 @@ func TestParseDomainsEmpty(t *testing.T) {
 	}
 }
 
+func TestMergeDomainsDedupPreservesFirst(t *testing.T) {
+	base := []Domain{
+		{Name: "Example.com", Category: CategoryDomestic},
+		{Name: "foo.com", Category: CategoryForeign},
+	}
+	extras := []Domain{
+		{Name: "example.com", Category: CategoryCustom},
+		{Name: " Foo.com ", Category: CategoryCustom},
+		{Name: "bar.com", Category: CategoryCustom},
+	}
+
+	got := MergeDomains(base, extras)
+	want := []Domain{
+		{Name: "Example.com", Category: CategoryDomestic},
+		{Name: "foo.com", Category: CategoryForeign},
+		{Name: "bar.com", Category: CategoryCustom},
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("domain %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
 func TestRunQueriesEarlyAbort(t *testing.T) {
 	domains := []Domain{{Name: "a.com"}, {Name: "b.com"}, {Name: "c.com"}}
 	opts := Options{Domains: domains, Queries: 4} // 1 warm-up + 12 measured
