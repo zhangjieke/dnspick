@@ -52,7 +52,6 @@ The built-in default domains should be updated to include these domestic domains
 - `baidu.com`
 - `bilibili.com`
 - `douyin.com`
-- `gov.cn`
 - `jd.com`
 - `jianshu.com`
 - `meituan.com`

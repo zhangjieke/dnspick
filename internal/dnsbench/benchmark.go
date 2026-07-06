@@ -29,6 +29,22 @@ type Options struct {
 	Concurrency int           // maximum number of servers tested concurrently
 }
 
+// FailureRecord captures one failed measured query for diagnostics/reporting.
+type FailureRecord struct {
+	ServerName string
+	Address    string
+	Protocol   Protocol
+	Domain     string
+	Error      string
+	IsSystem   bool
+}
+
+// RunOutput is the full result of one benchmark run.
+type RunOutput struct {
+	Results  []Result
+	Failures []FailureRecord
+}
+
 // Result is the final benchmark result for a single DNS server.
 type Result struct {
 	Name, Address      string
@@ -42,6 +58,7 @@ type Result struct {
 // queryResult is the raw result of a single query.
 type queryResult struct {
 	server   Server
+	domain   string
 	duration time.Duration
 	err      error
 }
@@ -112,6 +129,12 @@ func domainKey(name string) string {
 // in descending order. progress is called after each completed query with that
 // query's domain (may be nil); it drives the live progress UI.
 func Run(opts Options, progress func(domain string)) []Result {
+	return RunDetailed(opts, progress).Results
+}
+
+// RunDetailed benchmarks all servers concurrently and returns both aggregate
+// results and measured-query failures.
+func RunDetailed(opts Options, progress func(domain string)) RunOutput {
 	servers := opts.Servers
 	if len(servers) == 0 {
 		servers = DefaultServers
@@ -143,7 +166,11 @@ func Run(opts Options, progress func(domain string)) []Result {
 	wg.Wait()
 	close(resultsChan)
 
-	return calculateScores(aggregateResults(resultsChan))
+	stats, failures := aggregateResults(resultsChan)
+	return RunOutput{
+		Results:  calculateScores(stats),
+		Failures: failures,
+	}
 }
 
 // benchmarkServer runs all queries sequentially against a single server.
@@ -174,12 +201,12 @@ func runQueries(server Server, q querier, opts Options, ch chan<- queryResult, p
 	for _, domain := range opts.Domains {
 		for range opts.Queries {
 			if unreachable {
-				ch <- queryResult{server: server, err: errUnreachable}
+				ch <- queryResult{server: server, domain: domain.Name, err: errUnreachable}
 				progress(domain.Name)
 				continue
 			}
 			d, err := q(domain.Name)
-			ch <- queryResult{server: server, duration: d, err: err}
+			ch <- queryResult{server: server, domain: domain.Name, duration: d, err: err}
 			progress(domain.Name)
 			if err != nil {
 				streak++
@@ -192,8 +219,9 @@ func runQueries(server Server, q querier, opts Options, ch chan<- queryResult, p
 }
 
 // aggregateResults collects and aggregates data from the channel.
-func aggregateResults(resultsChan <-chan queryResult) map[string]*serverStat {
+func aggregateResults(resultsChan <-chan queryResult) (map[string]*serverStat, []FailureRecord) {
 	serverStats := make(map[string]*serverStat)
+	var failures []FailureRecord
 	for result := range resultsChan {
 		stats, ok := serverStats[result.server.Name]
 		if !ok {
@@ -204,9 +232,18 @@ func aggregateResults(resultsChan <-chan queryResult) map[string]*serverStat {
 		if result.err == nil {
 			stats.totalTime += result.duration
 			stats.successes++
+			continue
 		}
+		failures = append(failures, FailureRecord{
+			ServerName: result.server.Name,
+			Address:    result.server.Address,
+			Protocol:   result.server.Protocol,
+			Domain:     result.domain,
+			Error:      result.err.Error(),
+			IsSystem:   result.server.IsSystem,
+		})
 	}
-	return serverStats
+	return serverStats, failures
 }
 
 // calculateScores computes the final Result list and sorts it by score in descending order.

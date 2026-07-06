@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,11 +36,14 @@ var (
 )
 
 var (
-	ensureDomainList  = config.EnsureDomainList
-	ensureServerList  = config.EnsureServerList
-	loadDomainEntries = config.LoadDomainEntries
-	loadServerEntries = config.LoadServerEntries
-	detectSystemDNS   = dnsbench.DetectSystemDNS
+	ensureDomainList             = config.EnsureDomainList
+	ensureServerList             = config.EnsureServerList
+	loadDomainEntries            = config.LoadDomainEntries
+	loadServerEntries            = config.LoadServerEntries
+	detectSystemDNS              = dnsbench.DetectSystemDNS
+	writeFailureReport           = ui.WriteFailureReport
+	stdoutWriter       io.Writer = os.Stdout
+	stderrWriter       io.Writer = os.Stderr
 )
 
 var rootCmd = &cobra.Command{
@@ -139,9 +145,9 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 	// JSON mode: stdout carries only the JSON document, status goes to stderr,
 	// and the live progress UI is skipped so the output stays pipe-friendly.
 	if jsonOutput {
-		fmt.Fprintf(os.Stderr, m.BenchStarting, len(servers), len(domains))
-		results := dnsbench.Run(opts, nil)
-		return ui.WriteJSON(os.Stdout, results, queriesPerDomain, len(domains))
+		fmt.Fprintf(stderrWriter, m.BenchStarting, len(servers), len(domains))
+		output := dnsbench.RunDetailed(opts, nil)
+		return ui.WriteJSON(stdoutWriter, output.Results, queriesPerDomain, len(domains))
 	}
 
 	// Kick off a non-blocking check for a newer release; it runs concurrently
@@ -152,17 +158,33 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 
 	tracker := ui.NewStatusTracker(domains, len(servers), queriesPerDomain)
 	tracker.Start()
-	results := dnsbench.Run(opts, tracker.Progress)
+	output := dnsbench.RunDetailed(opts, tracker.Progress)
 	tracker.Stop()
 
 	fmt.Println(m.ResultsHeader)
-	ui.PrintResultsTable(results)
+	ui.PrintResultsTable(output.Results)
 
 	fmt.Println(m.RecommendHeader)
-	ui.PrintRecommendations(results)
+	ui.PrintRecommendations(output.Results)
+
+	reportFailureOutput(output.Failures)
 
 	autoUpdate(updateCh)
 	return nil
+}
+
+func reportFailureOutput(failures []dnsbench.FailureRecord) {
+	if len(failures) == 0 {
+		return
+	}
+	path, err := writeFailureReport(failures, time.Now())
+	if err != nil {
+		fmt.Fprintf(stderrWriter, "warning: failed to write failure report: %v\n", err)
+		return
+	}
+	if path != "" {
+		fmt.Fprintf(stdoutWriter, "\nFailure report: %s\n", path)
+	}
 }
 
 func benchmarkDomains(cmd *cobra.Command) ([]dnsbench.Domain, error) {
@@ -213,19 +235,76 @@ func benchmarkServers(cmd *cobra.Command, systemName, systemNameFmt string) ([]d
 }
 
 func defaultDomainEntries() []string {
-	entries := make([]string, 0, len(dnsbench.DefaultDomains))
-	for _, d := range dnsbench.DefaultDomains {
-		entries = append(entries, d.Name)
+	domestic := groupedDomainNames(dnsbench.CategoryDomestic)
+	foreign := groupedDomainNames(dnsbench.CategoryForeign)
+
+	entries := make([]string, 0, len(domestic)+len(foreign)+1)
+	entries = append(entries, domestic...)
+	if len(domestic) > 0 && len(foreign) > 0 {
+		entries = append(entries, "")
 	}
+	entries = append(entries, foreign...)
 	return entries
 }
 
 func defaultServerEntries() []string {
-	entries := make([]string, 0, len(dnsbench.DefaultServers))
+	byProtocol := map[dnsbench.Protocol][]string{
+		dnsbench.UDP:  nil,
+		dnsbench.DOT:  nil,
+		dnsbench.DOH:  nil,
+		dnsbench.DOH3: nil,
+	}
 	for _, s := range dnsbench.DefaultServers {
-		entries = append(entries, serverConfigEntry(s))
+		byProtocol[s.Protocol] = append(byProtocol[s.Protocol], serverConfigEntry(s))
+	}
+
+	order := []dnsbench.Protocol{dnsbench.UDP, dnsbench.DOT, dnsbench.DOH, dnsbench.DOH3}
+	var entries []string
+	for _, protocol := range order {
+		group := byProtocol[protocol]
+		if protocol == dnsbench.UDP {
+			sortUDPServerEntries(group)
+		} else {
+			sort.Strings(group)
+		}
+		if len(group) == 0 {
+			continue
+		}
+		if len(entries) > 0 {
+			entries = append(entries, "")
+		}
+		entries = append(entries, group...)
 	}
 	return entries
+}
+
+func sortUDPServerEntries(entries []string) {
+	sort.Slice(entries, func(i, j int) bool {
+		a := net.ParseIP(entries[i]).To4()
+		b := net.ParseIP(entries[j]).To4()
+		switch {
+		case a != nil && b != nil:
+			for k := 0; k < len(a); k++ {
+				if a[k] != b[k] {
+					return a[k] < b[k]
+				}
+			}
+			return false
+		default:
+			return entries[i] < entries[j]
+		}
+	})
+}
+
+func groupedDomainNames(category string) []string {
+	var names []string
+	for _, d := range dnsbench.DefaultDomains {
+		if d.Category == category {
+			names = append(names, d.Name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 func serverConfigEntry(s dnsbench.Server) string {

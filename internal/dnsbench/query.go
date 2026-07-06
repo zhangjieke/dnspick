@@ -17,10 +17,12 @@ import (
 // querier performs a single query for a domain and returns how long it took.
 type querier func(domain string) (time.Duration, error)
 
+var newQuerier = buildQuerier
+
 // newQuerier builds a reusable query function and its cleanup function for a
 // server. The server hostname is resolved to an IP up front so that the system
 // DNS resolution time is not counted in the measurement.
-func newQuerier(server Server, timeout time.Duration) (querier, func()) {
+func buildQuerier(server Server, timeout time.Duration) (querier, func()) {
 	switch server.Protocol {
 	case UDP:
 		ip := resolveHost(server.Address, timeout)

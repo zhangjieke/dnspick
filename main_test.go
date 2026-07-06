@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/zhangjieke/dnspick/internal/dnsbench"
@@ -294,11 +296,71 @@ func TestBenchmarkServersEnsureError(t *testing.T) {
 
 func TestDefaultDomainEntries(t *testing.T) {
 	got := defaultDomainEntries()
-	if len(got) != len(dnsbench.DefaultDomains) {
-		t.Fatalf("got %d entries, want %d", len(got), len(dnsbench.DefaultDomains))
+	split := slices.Index(got, "")
+	if split < 0 {
+		t.Fatalf("expected blank separator, got %v", got)
 	}
-	if got[0] != dnsbench.DefaultDomains[0].Name {
-		t.Fatalf("first entry = %q, want %q", got[0], dnsbench.DefaultDomains[0].Name)
+	domestic := got[:split]
+	foreign := got[split+1:]
+	if !slices.IsSorted(domestic) {
+		t.Fatalf("domestic group not sorted: %v", domestic)
+	}
+	if !slices.IsSorted(foreign) {
+		t.Fatalf("foreign group not sorted: %v", foreign)
+	}
+	if domestic[0] != "163.com" || domestic[len(domestic)-1] != "zhihu.com" {
+		t.Fatalf("unexpected domestic range: %v", domestic)
+	}
+	if foreign[0] != "anthropic.com" || foreign[len(foreign)-1] != "youtube.com" {
+		t.Fatalf("unexpected foreign range: %v", foreign)
+	}
+}
+
+func TestDefaultServerEntries(t *testing.T) {
+	got := defaultServerEntries()
+	groups := splitOnEmpty(got)
+	if len(groups) != 4 {
+		t.Fatalf("expected 4 protocol groups, got %d: %v", len(groups), groups)
+	}
+	for i := 1; i < len(groups); i++ {
+		if !slices.IsSorted(groups[i]) {
+			t.Fatalf("group %d not sorted: %v", i, groups[i])
+		}
+	}
+	if containsString(got, "127.0.0.1") {
+		t.Fatalf("default server entries should not include localhost: %v", got)
+	}
+	wantUDP := []string{
+		"1.0.0.1",
+		"1.1.1.1",
+		"8.8.4.4",
+		"8.8.8.8",
+		"9.9.9.9",
+		"52.80.52.52",
+		"114.114.114.114",
+		"114.114.115.115",
+		"117.50.10.10",
+		"119.28.28.28",
+		"119.29.29.29",
+		"180.76.76.76",
+		"180.184.1.1",
+		"180.184.2.2",
+		"208.67.220.220",
+		"208.67.222.222",
+		"223.5.5.5",
+		"223.6.6.6",
+	}
+	if !slices.Equal(groups[0], wantUDP) {
+		t.Fatalf("unexpected UDP group: %v", groups[0])
+	}
+	if groups[1][0] != "tls://dns.alidns.com" {
+		t.Fatalf("unexpected DoT group: %v", groups[1])
+	}
+	if groups[2][0] != "https://cloudflare-dns.com/dns-query" {
+		t.Fatalf("unexpected DoH group: %v", groups[2])
+	}
+	if groups[3][0] != "h3://cloudflare-dns.com/dns-query" {
+		t.Fatalf("unexpected DoH3 group: %v", groups[3])
 	}
 }
 
@@ -316,6 +378,48 @@ func TestServerConfigEntry(t *testing.T) {
 		if got := serverConfigEntry(tt.server); got != tt.want {
 			t.Fatalf("serverConfigEntry(%+v) = %q, want %q", tt.server, got, tt.want)
 		}
+	}
+}
+
+func TestReportFailureOutputPrintsPath(t *testing.T) {
+	origWriter := writeFailureReport
+	origStdout := stdoutWriter
+	writeFailureReport = func([]dnsbench.FailureRecord, time.Time) (string, error) {
+		return "/tmp/dnspick-failures-test.txt", nil
+	}
+	var out bytes.Buffer
+	stdoutWriter = &out
+	defer func() {
+		writeFailureReport = origWriter
+		stdoutWriter = origStdout
+	}()
+
+	failures := []dnsbench.FailureRecord{{ServerName: "X", Address: "1.1.1.1", Protocol: dnsbench.UDP, Domain: "a.com", Error: "boom"}}
+	reportFailureOutput(failures)
+	stdout := out.String()
+	if !strings.Contains(stdout, "/tmp/dnspick-failures-test.txt") {
+		t.Fatalf("stdout = %q, want failure report path", stdout)
+	}
+}
+
+func TestReportFailureOutputWarnsOnWriteError(t *testing.T) {
+	origWriter := writeFailureReport
+	origStderr := stderrWriter
+	writeFailureReport = func([]dnsbench.FailureRecord, time.Time) (string, error) {
+		return "", errors.New("boom")
+	}
+	var errOut bytes.Buffer
+	stderrWriter = &errOut
+	defer func() {
+		writeFailureReport = origWriter
+		stderrWriter = origStderr
+	}()
+
+	failures := []dnsbench.FailureRecord{{ServerName: "X", Address: "1.1.1.1", Protocol: dnsbench.UDP, Domain: "a.com", Error: "boom"}}
+	reportFailureOutput(failures)
+	stderr := errOut.String()
+	if !strings.Contains(stderr, "failed to write failure report") {
+		t.Fatalf("stderr = %q, want warning", stderr)
 	}
 }
 
@@ -343,6 +447,34 @@ func countDomain(domains []dnsbench.Domain, name string) int {
 
 func normalizeDomainName(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
+}
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}
+
+func splitOnEmpty(items []string) [][]string {
+	var groups [][]string
+	var current []string
+	for _, item := range items {
+		if item == "" {
+			if len(current) > 0 {
+				groups = append(groups, current)
+				current = nil
+			}
+			continue
+		}
+		current = append(current, item)
+	}
+	if len(current) > 0 {
+		groups = append(groups, current)
+	}
+	return groups
 }
 
 func containsServer(servers []dnsbench.Server, protocol dnsbench.Protocol, address string) bool {

@@ -92,17 +92,24 @@ func TestRunQueriesAllSuccess(t *testing.T) {
 	if want := 1 + len(domains)*opts.Queries; calls != want {
 		t.Errorf("querier called %d times, want %d", calls, want)
 	}
+
+	for len(ch) > 0 {
+		got := <-ch
+		if got.domain == "" {
+			t.Fatal("expected measured query to carry domain name")
+		}
+	}
 }
 
 func TestAggregateResults(t *testing.T) {
 	srv := Server{Name: "X", Address: "1.2.3.4", Protocol: UDP}
 	ch := make(chan queryResult, 3)
-	ch <- queryResult{server: srv, duration: 10 * time.Millisecond}
-	ch <- queryResult{server: srv, duration: 30 * time.Millisecond}
-	ch <- queryResult{server: srv, err: errors.New("boom")}
+	ch <- queryResult{server: srv, domain: "a.com", duration: 10 * time.Millisecond}
+	ch <- queryResult{server: srv, domain: "b.com", duration: 30 * time.Millisecond}
+	ch <- queryResult{server: srv, domain: "c.com", err: errors.New("boom")}
 	close(ch)
 
-	stats := aggregateResults(ch)
+	stats, failures := aggregateResults(ch)
 	s, ok := stats["X"]
 	if !ok {
 		t.Fatal("missing server X")
@@ -115,6 +122,44 @@ func TestAggregateResults(t *testing.T) {
 	}
 	if s.address != "1.2.3.4" {
 		t.Fatalf("address=%q", s.address)
+	}
+	if len(failures) != 1 {
+		t.Fatalf("failures = %v, want 1 record", failures)
+	}
+	if failures[0].Domain != "c.com" || failures[0].Error != "boom" {
+		t.Fatalf("failure = %+v, want domain c.com and error boom", failures[0])
+	}
+}
+
+func TestRunDetailedReturnsFailures(t *testing.T) {
+	opts := Options{
+		Servers: []Server{{Name: "X", Address: "1.1.1.1", Protocol: UDP}},
+		Domains: []Domain{{Name: "a.com"}},
+		Queries: 1,
+	}
+
+	origNewQuerier := newQuerier
+	newQuerier = func(Server, time.Duration) (querier, func()) {
+		calls := 0
+		return func(string) (time.Duration, error) {
+			calls++
+			if calls == 1 {
+				return 0, errors.New("warmup")
+			}
+			return 0, errors.New("measured")
+		}, func() {}
+	}
+	defer func() { newQuerier = origNewQuerier }()
+
+	output := RunDetailed(opts, nil)
+	if len(output.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(output.Results))
+	}
+	if len(output.Failures) != 1 {
+		t.Fatalf("expected 1 failure, got %d", len(output.Failures))
+	}
+	if output.Failures[0].Error != "measured" {
+		t.Fatalf("failure error = %q, want measured", output.Failures[0].Error)
 	}
 }
 
